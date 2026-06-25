@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+
+<html class="light" lang="zh-CN"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>找大状管理系统 - 登录</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "error-container": "#ffdad6",
+                        "on-tertiary-fixed": "#072100",
+                        "on-secondary": "#ffffff",
+                        "sidebar-accent": "#002140",
+                        "surface-tint": "#4d6077",
+                        "primary": "#000000",
+                        "inverse-on-surface": "#f0f1f3",
+                        "surface-bright": "#f8f9fb",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container-high": "#e7e8ea",
+                        "secondary-fixed-dim": "#a2c9ff",
+                        "tertiary": "#000000",
+                        "platform-shipinhao": "#E6A23C",
+                        "surface-container-highest": "#e1e2e4",
+                        "on-tertiary-container": "#3e9609",
+                        "status-success": "#67C23A",
+                        "surface-variant": "#e1e2e4",
+                        "secondary-fixed": "#d3e4ff",
+                        "background": "#f8f9fb",
+                        "tertiary-fixed-dim": "#80dd52",
+                        "surface": "#f8f9fb",
+                        "on-tertiary": "#ffffff",
+                        "error": "#ba1a1a",
+                        "platform-xhs": "#909399",
+                        "tertiary-container": "#072100",
+                        "status-warning": "#E6A23C",
+                        "surface-dim": "#d9dadc",
+                        "on-error": "#ffffff",
+                        "on-surface": "#191c1e",
+                        "on-error-container": "#93000a",
+                        "on-surface-variant": "#43474d",
+                        "on-background": "#191c1e",
+                        "on-secondary-container": "#003460",
+                        "tertiary-fixed": "#9bfa6b",
+                        "sidebar-deep": "#001529",
+                        "outline": "#74777d",
+                        "platform-douyin": "#F56C6C",
+                        "secondary-container": "#409eff",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#d1e4ff",
+                        "platform-kuaishou": "#67C23A",
+                        "on-primary-fixed": "#071d31",
+                        "surface-container": "#edeef0",
+                        "primary-container": "#071d31",
+                        "inverse-primary": "#b4c8e3",
+                        "on-tertiary-fixed-variant": "#1d5200",
+                        "primary-fixed-dim": "#b4c8e3",
+                        "inverse-surface": "#2e3132",
+                        "on-secondary-fixed": "#001c38",
+                        "status-danger": "#F56C6C",
+                        "on-primary-fixed-variant": "#35485e",
+                        "on-secondary-fixed-variant": "#004881",
+                        "on-primary-container": "#72869e",
+                        "status-info": "#909399",
+                        "surface-container-low": "#f3f4f6",
+                        "outline-variant": "#c4c6cd",
+                        "secondary": "#0060a9"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "stack-sm": "0.5rem",
+                        "stack-md": "1rem",
+                        "sidebar-collapsed": "64px",
+                        "margin-page": "2rem",
+                        "sidebar-width": "200px",
+                        "gutter": "1.5rem",
+                        "stack-lg": "1.5rem"
+                    },
+                    "fontFamily": {
+                        "label-md": ["Inter"],
+                        "display-lg": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "headline-sm": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "display-lg-mobile": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "label-md": ["12px", {"lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "500"}],
+                        "display-lg": ["32px", {"lineHeight": "40px", "letterSpacing": "0.02em", "fontWeight": "700"}],
+                        "body-md": ["14px", {"lineHeight": "22px", "fontWeight": "400"}],
+                        "headline-sm": ["20px", {"lineHeight": "28px", "fontWeight": "600"}],
+                        "body-lg": ["16px", {"lineHeight": "24px", "fontWeight": "400"}],
+                        "headline-md": ["24px", {"lineHeight": "32px", "fontWeight": "600"}],
+                        "display-lg-mobile": ["24px", {"lineHeight": "32px", "fontWeight": "700"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        @keyframes pulse-custom {
+            0% { box-shadow: 0 0 0 0 rgba(64, 158, 255, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(64, 158, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(64, 158, 255, 0); }
+        }
+        .animate-fade-in { animation: fadeIn 0.8s ease-out forwards; }
+        .delay-100 { animation-delay: 0.1s; }
+        .delay-200 { animation-delay: 0.2s; }
+        .delay-300 { animation-delay: 0.3s; }
+        .animate-float { animation: float 4s ease-in-out infinite; }
+        .primary-btn-pulse:hover { animation: pulse-custom 1.5s infinite; }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        input:focus + span.material-symbols-outlined {
+            color: #409EFF;
+        }
+    </style>
+</head>
+<body class="bg-background font-body-md text-on-surface overflow-hidden">
+<main class="flex h-screen w-full">
+<!-- Left Side: Shader & Brand (60%) -->
+<section class="relative hidden md:flex md:w-3/5 h-full items-center justify-center overflow-hidden bg-sidebar-deep">
+<!-- STITCH_SHADER_START:ANIMATION_6 class="absolute inset-0 w-full h-full opacity-60" -->
+<div class="absolute inset-0 w-full h-full opacity-60" style="display:block;">
+<canvas id="shader-canvas-ANIMATION_6" style="display:block;width:100%;height:100%"></canvas>
+<script>
+(function() {
+  const canvas = document.getElementById('shader-canvas-ANIMATION_6');
+
+  // Sync the WebGL drawing-buffer size with the CSS-driven layout size.
+  // This fires on initial layout and whenever the element is resized.
+  function syncSize() {
+    const w = canvas.clientWidth  || 1280;
+    const h = canvas.clientHeight || 720;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width  = w;
+      canvas.height = h;
+    }
+  }
+  if (typeof ResizeObserver !== 'undefined') {
+    new ResizeObserver(syncSize).observe(canvas);
+  }
+  syncSize();
+
+  const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return;
+  const vs = `attribute vec2 a_position;
+varying vec2 v_texCoord;
+void main() {
+  v_texCoord = a_position * 0.5 + 0.5;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}`;
+  const fs = `precision highp float;
+varying vec2 v_texCoord;
+uniform float u_time;
+uniform vec2 u_resolution;
+
+void main() {
+    vec2 uv = v_texCoord;
+    float time = u_time * 0.2;
+    
+    // Create a flowing organic gradient movement
+    vec3 color1 = vec3(0.0, 0.08, 0.16); // #001529
+    vec3 color2 = vec3(0.0, 0.23, 0.44); // #003a70
+    vec3 color3 = vec3(0.25, 0.62, 1.0); // Primary blue #409EFF
+    
+    float noise = sin(uv.x * 3.0 + time) * cos(uv.y * 3.0 - time);
+    noise += sin(uv.x * 2.0 - time * 1.5) * cos(uv.y * 4.0 + time * 0.8);
+    
+    float mask = smoothstep(-1.0, 1.0, noise);
+    
+    vec3 finalColor = mix(color1, color2, uv.y + mask * 0.3);
+    finalColor = mix(finalColor, color3, mask * 0.15);
+    
+    // Add subtle vignetting
+    float dist = distance(uv, vec2(0.5));
+    finalColor *= 1.2 - dist * 0.5;
+    
+    gl_FragColor = vec4(finalColor, 1.0);
+}`;
+  function cs(type, src) {
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    return s;
+  }
+  const prog = gl.createProgram();
+  gl.attachShader(prog, cs(gl.VERTEX_SHADER, vs));
+  gl.attachShader(prog, cs(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(prog);
+  gl.useProgram(prog);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1, 1,-1, -1,1, 1,1]), gl.STATIC_DRAW);
+  const pos = gl.getAttribLocation(prog, 'a_position');
+  gl.enableVertexAttribArray(pos);
+  gl.vertexAttribPointer(pos, 2, gl.FLOAT, false, 0, 0);
+  const uTime = gl.getUniformLocation(prog, 'u_time');
+  const uRes = gl.getUniformLocation(prog, 'u_resolution');
+  const uMouse = gl.getUniformLocation(prog, 'u_mouse');
+
+  // u_mouse is in pixel coordinates matching u_resolution (ShaderToy convention).
+  // Shaders that need normalized coords should use: u_mouse / u_resolution.
+  let mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+  window.addEventListener('mousemove', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width && rect.height) {
+      const nx = (event.clientX - rect.left) / rect.width;
+      const ny = 1.0 - (event.clientY - rect.top) / rect.height;
+      mouse.x = nx * canvas.width;
+      mouse.y = ny * canvas.height;
+    }
+  });
+
+  function render(t) {
+    if (typeof ResizeObserver === 'undefined') syncSize();
+    gl.viewport(0, 0, canvas.width, canvas.height);
+    if (uTime) gl.uniform1f(uTime, t * 0.001);
+    if (uRes) gl.uniform2f(uRes, canvas.width, canvas.height);
+    if (uMouse) gl.uniform2f(uMouse, mouse.x, mouse.y);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    requestAnimationFrame(render);
+  }
+  render(0);
+})();
+</script>
+</div>
+<!-- STITCH_SHADER_END:ANIMATION_6 -->
+<div class="relative z-10 p-margin-page max-w-2xl">
+<!-- Branding Container -->
+<div class="animate-fade-in">
+<div class="flex items-center gap-stack-sm mb-stack-lg animate-float">
+<div class="w-12 h-12 rounded-lg bg-secondary-container flex items-center justify-center text-white shadow-lg">
+<span class="material-symbols-outlined text-[32px]">shield_person</span>
+</div>
+<span class="font-headline-md text-headline-md font-bold text-white tracking-tight">找大状 Pro-SaaS</span>
+</div>
+<h1 class="font-display-lg text-display-lg text-white mb-stack-md leading-tight">
+                        找大状管理系统
+                    </h1>
+<p class="font-body-lg text-body-lg text-white/80 leading-relaxed mb-stack-lg">
+                        一站式管理抖音、快手、小红书、视频号等平台账号与内容发布，助力找大状团队高效运营。
+                    </p>
+<!-- Glassmorphism Stats/Decorative elements -->
+<div class="grid grid-cols-2 gap-stack-md">
+<div class="glass-panel p-stack-md rounded-xl">
+<div class="text-white/60 font-label-md text-label-md uppercase mb-1">活跃账号</div>
+<div class="text-white font-headline-sm text-headline-sm">2,480+</div>
+</div>
+<div class="glass-panel p-stack-md rounded-xl">
+<div class="text-white/60 font-label-md text-label-md uppercase mb-1">今日发布</div>
+<div class="text-white font-headline-sm text-headline-sm">12,052</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Bottom Left Decorative Branding -->
+<div class="absolute bottom-margin-page left-margin-page flex items-center gap-stack-sm text-white/40 font-label-md text-label-md">
+<span>SENTINEL NODE: 0x449A</span>
+<div class="w-1.5 h-1.5 rounded-full bg-status-success animate-pulse"></div>
+</div>
+</section>
+<!-- Right Side: Login Form (40%) -->
+<section class="w-full md:w-2/5 h-full bg-white flex flex-col justify-center px-margin-page relative">
+<div class="max-w-md w-full mx-auto">
+<!-- Mobile Logo (visible on small screens) -->
+<div class="md:hidden flex items-center gap-stack-sm mb-stack-lg animate-fade-in">
+<span class="material-symbols-outlined text-secondary-container text-display-lg">shield_person</span>
+<span class="font-headline-md text-headline-md font-bold text-primary">找大状 Pro-SaaS</span>
+</div>
+<div class="animate-fade-in delay-100">
+<h2 class="font-headline-md text-headline-md text-primary mb-2">欢迎回来</h2>
+<p class="text-on-surface-variant font-body-md text-body-md mb-stack-lg">请登录您的管理账户以继续</p>
+</div>
+<form class="space-y-stack-md">
+<!-- Username Input -->
+<div class="animate-fade-in delay-200 group">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1">用户名 / 邮箱</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline transition-colors">person</span>
+<input class="w-full pl-10 pr-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg font-body-md text-on-surface focus:outline-none focus:border-secondary-container focus:ring-4 focus:ring-secondary-container/10 transition-all" placeholder="输入您的账号" type="text"/>
+</div>
+</div>
+<!-- Password Input -->
+<div class="animate-fade-in delay-300">
+<label class="block font-label-md text-label-md text-on-surface-variant mb-1 ml-1">密码</label>
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline transition-colors">lock</span>
+<input class="w-full pl-10 pr-12 py-3 bg-surface-container-low border border-outline-variant rounded-lg font-body-md text-on-surface focus:outline-none focus:border-secondary-container focus:ring-4 focus:ring-secondary-container/10 transition-all" placeholder="输入您的密码" type="password"/>
+<button class="absolute right-3 top-1/2 -translate-y-1/2 text-outline hover:text-on-surface transition-colors" type="button">
+<span class="material-symbols-outlined">visibility</span>
+</button>
+</div>
+</div>
+<!-- Options -->
+<div class="flex items-center justify-between font-label-md text-label-md animate-fade-in delay-300 py-1">
+<label class="flex items-center gap-2 cursor-pointer text-on-surface-variant hover:text-on-surface">
+<input class="w-4 h-4 rounded border-outline-variant text-secondary-container focus:ring-secondary-container transition-all" type="checkbox"/>
+<span>记住我</span>
+</label>
+<a class="text-secondary hover:underline transition-all" href="#">忘记密码？</a>
+</div>
+<!-- Submit Button -->
+<div class="pt-stack-md animate-fade-in delay-300">
+<button class="w-full py-4 bg-secondary-container text-white font-headline-sm text-headline-sm rounded-lg shadow-lg shadow-secondary-container/20 hover:scale-[1.02] active:scale-95 transition-all duration-300 primary-btn-pulse flex items-center justify-center gap-2" type="submit">
+<span>登录</span>
+<span class="material-symbols-outlined">login</span>
+</button>
+</div>
+<!-- Footer Link -->
+<div class="text-center mt-stack-lg animate-fade-in delay-300">
+<p class="font-body-md text-body-md text-on-surface-variant">
+                            还没有账号？ <a class="text-secondary font-bold hover:underline" href="#">注册账号</a>
+</p>
+</div>
+</form>
+<!-- Platform Icons (Social Login hint) -->
+<div class="mt-stack-lg pt-stack-lg border-t border-outline-variant/30 flex flex-col items-center animate-fade-in delay-300">
+<span class="font-label-md text-label-md text-outline mb-stack-md">多平台协同作业</span>
+<div class="flex gap-stack-lg opacity-40 grayscale hover:grayscale-0 hover:opacity-100 transition-all duration-500">
+<span class="material-symbols-outlined text-platform-douyin" title="抖音">video_library</span>
+<span class="material-symbols-outlined text-platform-xhs" title="小红书">auto_awesome</span>
+<span class="material-symbols-outlined text-platform-kuaishou" title="快手">bolt</span>
+<span class="material-symbols-outlined text-platform-shipinhao" title="视频号">play_circle</span>
+</div>
+</div>
+</div>
+<!-- Global Footer Component integrated into the panel -->
+<footer class="fixed bottom-0 right-0 w-full md:w-2/5 flex justify-center items-center gap-stack-lg p-margin-page z-40 bg-transparent">
+<div class="flex flex-col md:flex-row items-center gap-stack-md">
+<span class="text-label-md font-label-md font-bold text-on-surface">找大状</span>
+<div class="flex gap-stack-md">
+<a class="text-on-surface-variant font-label-md text-label-md hover:text-primary underline transition-all" href="#">Privacy Policy</a>
+<a class="text-on-surface-variant font-label-md text-label-md hover:text-primary underline transition-all" href="#">Terms of Service</a>
+<a class="text-on-surface-variant font-label-md text-label-md hover:text-primary underline transition-all" href="#">Contact Support</a>
+</div>
+<span class="text-on-surface-variant font-body-md text-body-md">© 2024 找大状. All rights reserved.</span>
+</div>
+</footer>
+</section>
+</main>
+<!-- Interactive Script for micro-interactions -->
+<script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const inputs = document.querySelectorAll('input');
+            
+            inputs.forEach(input => {
+                input.addEventListener('focus', () => {
+                    input.parentElement.parentElement.classList.add('scale-[1.01]');
+                });
+                input.addEventListener('blur', () => {
+                    input.parentElement.parentElement.classList.remove('scale-[1.01]');
+                });
+            });
+
+            const loginBtn = document.querySelector('button[type="submit"]');
+            loginBtn.addEventListener('click', (e) => {
+                // Visual feedback only for demo
+                e.preventDefault();
+                loginBtn.innerHTML = '<span class="material-symbols-outlined animate-spin">progress_activity</span> 正在验证...';
+                setTimeout(() => {
+                    loginBtn.innerHTML = '<span>登录</span><span class="material-symbols-outlined">login</span>';
+                }, 2000);
+            });
+        });
+    </script>
+</body></html>

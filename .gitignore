@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+coverage/
+
+# Local config (secrets)
+sau_backend_nest/conf.ts
+sau_frontend/.env.local
+sau_frontend/.env.*.local
+
+# Logs & OS
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# User runtime data (optional: remove if you want to commit empty dirs only)
+users/
+sau_backend_nest/db/*.db
