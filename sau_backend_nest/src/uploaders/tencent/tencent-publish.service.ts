@@ -9,6 +9,8 @@ import { userCookiesDir, userVideoDir } from '../../shared/paths/user-paths.util
 import { generateScheduleTimeNextDay } from '../../shared/schedule/schedule.util';
 import { resolveTencentCategory } from './tencent.constants';
 import { TencentVideoUploader } from './tencent-video.uploader';
+import type { WorkLink } from '../work-link';
+import { withAccount } from '../work-link';
 
 /** 封装视频号发布循环，供 PublishProcessor 调用 */
 @Injectable()
@@ -30,7 +32,7 @@ export class TencentPublishService {
     return join(userCookiesDir(this.app.baseDir, ownerId), filename);
   }
 
-  async publishVideo(payload: PublishJobPayload): Promise<void> {
+  async publishVideo(payload: PublishJobPayload): Promise<WorkLink[]> {
     const {
       ownerId,
       title,
@@ -59,6 +61,7 @@ export class TencentPublishService {
     }
 
     const categoryLabel = resolveTencentCategory(category);
+    const links: WorkLink[] = [];
 
     for (let index = 0; index < fileList.length; index++) {
       const file = fileList[index];
@@ -85,8 +88,13 @@ export class TencentPublishService {
             browserPublish,
           },
         );
-        await uploader.upload();
+        await uploader.upload().then((captured) => {
+          if (captured) {
+            links.push(withAccount(captured, account, file));
+          }
+        });
       }
     }
+    return links;
   }
 }

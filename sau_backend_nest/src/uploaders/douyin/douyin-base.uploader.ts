@@ -8,6 +8,7 @@ import type { BrowserService } from '../../shared/browser/browser.service';
 import { MEDIA_TYPE } from '../../shared/platform.constants';
 import { parseCookieStoragePath } from '../../shared/paths/user-paths.util';
 import { BaseUploader } from '../base/base-uploader';
+import type { WorkLinkSniffer } from '../capture-work-link';
 import {
   DOUYIN_PUBLISH_STRATEGY_IMMEDIATE,
   DOUYIN_PUBLISH_STRATEGY_SCHEDULED,
@@ -22,6 +23,7 @@ export abstract class DouyinBaseUploader extends BaseUploader {
   protected readonly publishStrategy: string;
   protected readonly debug: boolean;
   protected readonly browserPublish: boolean;
+  protected workLinkSniffer?: WorkLinkSniffer;
 
   constructor(
     protected readonly browserService: BrowserService,

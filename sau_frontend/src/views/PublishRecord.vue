@@ -179,6 +179,34 @@
             </el-tag>
           </span>
         </div>
+        <div v-if="currentRecord.status === 'success'" class="detail-row">
+          <span class="label">作品链接</span>
+          <div class="work-links">
+            <template v-if="getWorkLinks(currentRecord).length">
+              <div
+                v-for="(link, index) in getWorkLinks(currentRecord)"
+                :key="`${link.account}-${link.file || index}`"
+                class="work-link-item"
+              >
+                <span>{{ workLinkLabel(currentRecord, link) }}</span>
+                <a
+                  :href="link.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {{ link.kind === 'creator' ? '在视频号助手中查看' : '打开预览' }}
+                </a>
+                <button type="button" class="work-link-copy" @click="copyWorkLink(link.url)">
+                  复制链接
+                </button>
+              </div>
+            </template>
+            <span v-else-if="currentRecord.schedule_enabled" class="work-link-empty">
+              定时发布暂无公开链接
+            </span>
+            <span v-else class="work-link-empty">未获取到作品链接</span>
+          </div>
+        </div>
         <div class="detail-row">
           <span class="label">素材文件</span>
           <span class="multiline">{{ getFileList(currentRecord).join('、') || '无' }}</span>
@@ -315,6 +343,43 @@ const getAccountNames = (record) => {
     return record.account_list
   }
   return []
+}
+
+const getWorkLinks = (record) => {
+  return Array.isArray(record.work_links) ? record.work_links : []
+}
+
+const workLinkLabel = (record, link) => {
+  const accounts = Array.isArray(record.account_list) ? record.account_list : []
+  const names = getAccountNames(record)
+  const index = accounts.indexOf(link.account)
+  const name = index >= 0 && names[index] ? names[index] : link.account
+  return link.file ? `${name} · ${link.file}` : name
+}
+
+const copyWorkLink = async (url) => {
+  if (!url) {
+    ElMessage.warning('暂无可复制的链接')
+    return
+  }
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(url)
+    } else {
+      const input = document.createElement('textarea')
+      input.value = url
+      input.setAttribute('readonly', '')
+      input.style.position = 'fixed'
+      input.style.left = '-9999px'
+      document.body.appendChild(input)
+      input.select()
+      document.execCommand('copy')
+      document.body.removeChild(input)
+    }
+    ElMessage.success('链接已复制')
+  } catch {
+    ElMessage.error('复制失败，请手动复制')
+  }
 }
 
 const getFileList = (record) => {
@@ -640,6 +705,40 @@ onMounted(() => {
       .multiline {
         white-space: pre-wrap;
         word-break: break-all;
+      }
+
+      .work-links {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .work-link-item {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+
+        a,
+        .work-link-copy {
+          color: $primary-color;
+          text-decoration: none;
+          background: none;
+          border: none;
+          padding: 0;
+          font-size: inherit;
+          line-height: inherit;
+          cursor: pointer;
+
+          &:hover {
+            text-decoration: underline;
+          }
+        }
+      }
+
+      .work-link-empty {
+        color: $text-secondary;
       }
     }
   }

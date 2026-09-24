@@ -8,6 +8,7 @@ import type { BrowserService } from '../../shared/browser/browser.service';
 import { MEDIA_TYPE } from '../../shared/platform.constants';
 import { parseCookieStoragePath } from '../../shared/paths/user-paths.util';
 import { BaseUploader } from '../base/base-uploader';
+import type { WorkLinkSniffer } from '../capture-work-link';
 import {
   XHS_PUBLISH_SUCCESS_URL_PATTERN,
   XIAOHONGSHU_PUBLISH_STRATEGY_IMMEDIATE,
@@ -26,6 +27,7 @@ export abstract class XiaohongshuBaseUploader extends BaseUploader {
   protected title = '';
   protected desc = '';
   protected tags: string[] = [];
+  protected workLinkSniffer?: WorkLinkSniffer;
 
   constructor(
     protected readonly browserService: BrowserService,
@@ -151,6 +153,7 @@ export abstract class XiaohongshuBaseUploader extends BaseUploader {
   }
 
   protected async clickPublish(page: Page): Promise<void> {
+    this.workLinkSniffer?.start();
     while (true) {
       try {
         if (this.publishStrategy === XIAOHONGSHU_PUBLISH_STRATEGY_SCHEDULED) {

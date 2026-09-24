@@ -4,6 +4,11 @@ import type { AuthService } from '../../modules/account/auth.service';
 import type { AppConfig } from '../../config/app-config.interface';
 import type { BrowserService } from '../../shared/browser/browser.service';
 import { BaseUploader } from '../base/base-uploader';
+import {
+  attachWorkLinkSniffer,
+  finishPublicWorkLink,
+} from '../capture-work-link';
+import type { WorkLink } from '../work-link';
 import { DouyinBaseUploader } from './douyin-base.uploader';
 import {
   DOUYIN_PUBLISH_STRATEGY_IMMEDIATE,
@@ -126,6 +131,7 @@ export class DouyinNoteUploader extends DouyinBaseUploader {
       await this.setScheduleTimeDouyin(page, this.publishDate);
     }
 
+    this.workLinkSniffer?.start();
     for (let attempt = 1; attempt <= WAIT_MAX_ATTEMPTS; attempt++) {
       try {
         const publishButton = page.getByRole('button', {
@@ -153,7 +159,7 @@ export class DouyinNoteUploader extends DouyinBaseUploader {
     throw new Error(`等待发布完成超时，最后 URL=${page.url()}`);
   }
 
-  async upload(): Promise<void> {
+  async upload(): Promise<WorkLink | null> {
     this.logger.log('检查 cookie、图片和发布时间');
     await this.validateUploadArgs();
     this.logger.log('图文上传前检查通过');
@@ -171,7 +177,9 @@ export class DouyinNoteUploader extends DouyinBaseUploader {
     await this.browserService.addStealthScript(context);
 
     let uploadSuccess = false;
+    let workLink: WorkLink | null = null;
     const page = await context.newPage();
+    this.workLinkSniffer = attachWorkLinkSniffer(page, 'douyin', this.logger);
     try {
       this.logger.log('正在打开抖音上传页');
       await page.goto(
@@ -183,7 +191,20 @@ export class DouyinNoteUploader extends DouyinBaseUploader {
       this.logger.log(`上传页加载完成，当前 URL=${page.url()}`);
       await this.uploadNoteContent(page);
       uploadSuccess = true;
+      const scheduled =
+        this.publishStrategy === DOUYIN_PUBLISH_STRATEGY_SCHEDULED &&
+        this.publishDate !== 0;
+      if (!scheduled) {
+        workLink = await finishPublicWorkLink(
+          this.workLinkSniffer,
+          page,
+          this.logger,
+          'douyin',
+          this.accountFile,
+        );
+      }
     } finally {
+      this.workLinkSniffer.dispose();
       if (uploadSuccess) {
         await context.storageState({ path: this.accountFile });
         await sleep(2000);
@@ -192,5 +213,6 @@ export class DouyinNoteUploader extends DouyinBaseUploader {
       await context.close().catch(() => undefined);
       await browser.close().catch(() => undefined);
     }
+    return workLink;
   }
 }

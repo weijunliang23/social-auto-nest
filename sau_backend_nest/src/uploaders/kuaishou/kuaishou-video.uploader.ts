@@ -3,6 +3,11 @@ import type { AuthService } from '../../modules/account/auth.service';
 import type { AppConfig } from '../../config/app-config.interface';
 import type { BrowserService } from '../../shared/browser/browser.service';
 import { BaseUploader } from '../base/base-uploader';
+import {
+  attachWorkLinkSniffer,
+  finishPublicWorkLink,
+} from '../capture-work-link';
+import type { WorkLink } from '../work-link';
 import { KuaishouBaseUploader } from './kuaishou-base.uploader';
 import {
   KUAISHOU_PUBLISH_STRATEGY_SCHEDULED,
@@ -91,7 +96,7 @@ export class KuaishouVideoUploader extends KuaishouBaseUploader {
     this.logger.log('封面设置完成');
   }
 
-  async upload(): Promise<void> {
+  async upload(): Promise<WorkLink | null> {
     this.logger.log('检查 cookie、视频文件、封面和发布时间');
     await this.validateUploadArgs();
     this.logger.log('上传前检查通过');
@@ -107,7 +112,9 @@ export class KuaishouVideoUploader extends KuaishouBaseUploader {
     await this.browserService.addStealthScript(context);
 
     let uploadSuccess = false;
+    let workLink: WorkLink | null = null;
     const page = await context.newPage();
+    this.workLinkSniffer = attachWorkLinkSniffer(page, 'kuaishou', this.logger);
     try {
       await page.goto(KUAISHOU_UPLOAD_URL);
       this.logger.log(`开始搬运视频: ${this.title}`);
@@ -141,7 +148,21 @@ export class KuaishouVideoUploader extends KuaishouBaseUploader {
 
       await this.clickPublishAndConfirm(page);
       uploadSuccess = true;
+      const scheduled =
+        this.publishStrategy === KUAISHOU_PUBLISH_STRATEGY_SCHEDULED &&
+        this.publishDate !== 0;
+      if (!scheduled) {
+        workLink = await finishPublicWorkLink(
+          this.workLinkSniffer,
+          page,
+          this.logger,
+          'kuaishou',
+          this.accountFile,
+          this.filePath,
+        );
+      }
     } finally {
+      this.workLinkSniffer?.dispose();
       if (uploadSuccess) {
         await context.storageState({ path: this.accountFile });
         await sleep(2000);
@@ -150,5 +171,6 @@ export class KuaishouVideoUploader extends KuaishouBaseUploader {
       await context.close().catch(() => undefined);
       await browser.close().catch(() => undefined);
     }
+    return workLink;
   }
 }

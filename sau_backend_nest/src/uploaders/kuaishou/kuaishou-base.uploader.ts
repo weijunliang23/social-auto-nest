@@ -8,6 +8,7 @@ import type { BrowserService } from '../../shared/browser/browser.service';
 import { MEDIA_TYPE } from '../../shared/platform.constants';
 import { parseCookieStoragePath } from '../../shared/paths/user-paths.util';
 import { BaseUploader } from '../base/base-uploader';
+import type { WorkLinkSniffer } from '../capture-work-link';
 import {
   KUAISHOU_MANAGE_URL_PATTERN,
   KUAISHOU_PUBLISH_STRATEGY_IMMEDIATE,
@@ -23,6 +24,7 @@ export abstract class KuaishouBaseUploader extends BaseUploader {
   protected readonly publishStrategy: string;
   protected readonly debug: boolean;
   protected readonly browserPublish: boolean;
+  protected workLinkSniffer?: WorkLinkSniffer;
 
   constructor(
     protected readonly browserService: BrowserService,
@@ -197,6 +199,7 @@ export abstract class KuaishouBaseUploader extends BaseUploader {
   }
 
   protected async clickPublishAndConfirm(page: Page): Promise<void> {
+    this.workLinkSniffer?.start();
     while (true) {
       try {
         const publishButton = page.getByText('发布', { exact: true });

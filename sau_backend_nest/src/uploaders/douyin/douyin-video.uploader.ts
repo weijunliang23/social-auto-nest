@@ -3,6 +3,11 @@ import type { AuthService } from '../../modules/account/auth.service';
 import type { AppConfig } from '../../config/app-config.interface';
 import type { BrowserService } from '../../shared/browser/browser.service';
 import { BaseUploader } from '../base/base-uploader';
+import {
+  attachWorkLinkSniffer,
+  finishPublicWorkLink,
+} from '../capture-work-link';
+import type { WorkLink } from '../work-link';
 import { DouyinBaseUploader } from './douyin-base.uploader';
 import {
   DOUYIN_PUBLISH_STRATEGY_IMMEDIATE,
@@ -137,7 +142,7 @@ export class DouyinVideoUploader extends DouyinBaseUploader {
     await page.waitForSelector('div.extractFooter', { state: 'detached' });
   }
 
-  async upload(): Promise<void> {
+  async upload(): Promise<WorkLink | null> {
     this.logger.log('检查 cookie、视频文件、封面和发布时间');
     await this.validateUploadArgs();
     this.logger.log('上传前检查通过');
@@ -154,7 +159,9 @@ export class DouyinVideoUploader extends DouyinBaseUploader {
     });
     await this.browserService.addStealthScript(context);
 
+    let workLink: WorkLink | null = null;
     const page = await context.newPage();
+    this.workLinkSniffer = attachWorkLinkSniffer(page, 'douyin', this.logger);
     try {
       await page.goto(
         'https://creator.douyin.com/creator-micro/content/upload',
@@ -243,6 +250,7 @@ export class DouyinVideoUploader extends DouyinBaseUploader {
         await this.setScheduleTimeDouyin(page, this.publishDate);
       }
 
+      this.workLinkSniffer?.start();
       while (true) {
         try {
           const publishButton = page.getByRole('button', {
@@ -267,12 +275,28 @@ export class DouyinVideoUploader extends DouyinBaseUploader {
         }
       }
 
+      const scheduled =
+        this.publishStrategy === DOUYIN_PUBLISH_STRATEGY_SCHEDULED &&
+        this.publishDate !== 0;
+      if (!scheduled) {
+        workLink = await finishPublicWorkLink(
+          this.workLinkSniffer,
+          page,
+          this.logger,
+          'douyin',
+          this.accountFile,
+          this.filePath,
+        );
+      }
+
       await context.storageState({ path: this.accountFile });
       await sleep(2000);
     } finally {
+      this.workLinkSniffer?.dispose();
       await page.close().catch(() => undefined);
       await context.close().catch(() => undefined);
       await browser.close().catch(() => undefined);
     }
+    return workLink;
   }
 }

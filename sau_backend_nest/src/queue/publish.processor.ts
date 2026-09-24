@@ -9,6 +9,7 @@ import { TencentPublishService } from '../uploaders/tencent/tencent-publish.serv
 import { XiaohongshuPublishService } from '../uploaders/xiaohongshu/xiaohongshu-publish.service';
 import type { PublishJobPayload } from './publish-job.types';
 import { PUBLISH_QUEUE_NAME } from './publish.queue';
+import type { WorkLink } from '../uploaders/work-link';
 
 @Processor(PUBLISH_QUEUE_NAME, { concurrency: 1 })
 export class PublishProcessor extends WorkerHost {
@@ -42,33 +43,38 @@ export class PublishProcessor extends WorkerHost {
     );
 
     try {
+      let workLinks: WorkLink[] = [];
       switch (platformType) {
         case MEDIA_TYPE.DOUYIN:
           if (kind === 'video') {
-            await this.douyinPublishService.publishVideo(job.data);
+            workLinks = await this.douyinPublishService.publishVideo(job.data);
           } else {
-            await this.douyinPublishService.publishNote(job.data);
+            workLinks = await this.douyinPublishService.publishNote(job.data);
           }
           break;
         case MEDIA_TYPE.KUAISHOU:
           if (kind === 'video') {
-            await this.kuaishouPublishService.publishVideo(job.data);
+            workLinks = await this.kuaishouPublishService.publishVideo(job.data);
           } else {
-            await this.kuaishouPublishService.publishNote(job.data);
+            workLinks = await this.kuaishouPublishService.publishNote(job.data);
           }
           break;
         case MEDIA_TYPE.XHS:
           if (kind === 'video') {
-            await this.xiaohongshuPublishService.publishVideo(job.data);
+            workLinks = await this.xiaohongshuPublishService.publishVideo(
+              job.data,
+            );
           } else {
-            await this.xiaohongshuPublishService.publishNote(job.data);
+            workLinks = await this.xiaohongshuPublishService.publishNote(
+              job.data,
+            );
           }
           break;
         case MEDIA_TYPE.TENCENT:
           if (kind !== 'video') {
             throw new Error('视频号不支持图文发布');
           }
-          await this.tencentPublishService.publishVideo(job.data);
+          workLinks = await this.tencentPublishService.publishVideo(job.data);
           break;
         default:
           throw new Error(`不支持的平台: ${platformType}`);
@@ -85,6 +91,7 @@ export class PublishProcessor extends WorkerHost {
         recordId,
         'success',
         '发布成功',
+        workLinks,
       );
       this.logger.log(`Publish job ${job.id} completed successfully`);
     } catch (e) {

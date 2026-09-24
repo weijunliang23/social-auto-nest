@@ -16,6 +16,8 @@ import {
 } from './kuaishou.constants';
 import { KuaishouNoteUploader } from './kuaishou-note.uploader';
 import { KuaishouVideoUploader } from './kuaishou-video.uploader';
+import type { WorkLink } from '../work-link';
+import { withAccount } from '../work-link';
 
 @Injectable()
 export class KuaishouPublishService {
@@ -36,7 +38,7 @@ export class KuaishouPublishService {
     return join(userCookiesDir(this.app.baseDir, ownerId), filename);
   }
 
-  async publishVideo(payload: PublishJobPayload): Promise<void> {
+  async publishVideo(payload: PublishJobPayload): Promise<WorkLink[]> {
     const {
       ownerId,
       title,
@@ -63,6 +65,7 @@ export class KuaishouPublishService {
       publishDatetimes = fileList.map(() => 0 as const);
     }
 
+    const links: WorkLink[] = [];
     for (let index = 0; index < fileList.length; index++) {
       const file = fileList[index];
       const filePath = this.videoPath(ownerId, file);
@@ -90,12 +93,17 @@ export class KuaishouPublishService {
             browserPublish,
           },
         );
-        await uploader.upload();
+        await uploader.upload().then((captured) => {
+          if (captured) {
+            links.push(withAccount(captured, account, file));
+          }
+        });
       }
     }
+    return links;
   }
 
-  async publishNote(payload: PublishJobPayload): Promise<void> {
+  async publishNote(payload: PublishJobPayload): Promise<WorkLink[]> {
     const {
       ownerId,
       title,
@@ -121,6 +129,7 @@ export class KuaishouPublishService {
       ? KUAISHOU_PUBLISH_STRATEGY_SCHEDULED
       : KUAISHOU_PUBLISH_STRATEGY_IMMEDIATE;
 
+    const links: WorkLink[] = [];
     for (const account of accountList) {
       const accountFile = this.cookiePath(ownerId, account);
       this.logger.log(`发布快手图文 account=${account} title=${title}`);
@@ -139,7 +148,12 @@ export class KuaishouPublishService {
           browserPublish,
         },
       );
-      await uploader.upload();
+      await uploader.upload().then((captured) => {
+        if (captured) {
+          links.push(withAccount(captured, account));
+        }
+      });
     }
+    return links;
   }
 }

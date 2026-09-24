@@ -46,6 +46,25 @@ export class PublishRecord {
 
   @Prop({ type: Object, default: {} })
   extra_config!: Record<string, unknown>;
+
+  /** 发布成功后抓到的作品地址；抓取失败时为空 */
+  @Prop({
+    type: [
+      {
+        account: { type: String, required: true },
+        file: { type: String },
+        url: { type: String, required: true },
+        kind: { type: String, enum: ['public', 'creator'], required: true },
+      },
+    ],
+    default: [],
+  })
+  work_links!: {
+    account: string;
+    file?: string;
+    url: string;
+    kind: 'public' | 'creator';
+  }[];
 }
 
 export const PublishRecordSchema =

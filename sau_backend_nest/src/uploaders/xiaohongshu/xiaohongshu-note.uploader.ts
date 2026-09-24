@@ -3,6 +3,11 @@ import type { AuthService } from '../../modules/account/auth.service';
 import type { AppConfig } from '../../config/app-config.interface';
 import type { BrowserService } from '../../shared/browser/browser.service';
 import { BaseUploader } from '../base/base-uploader';
+import {
+  attachWorkLinkSniffer,
+  finishPublicWorkLink,
+} from '../capture-work-link';
+import type { WorkLink } from '../work-link';
 import { XiaohongshuBaseUploader } from './xiaohongshu-base.uploader';
 import {
   XHS_PUBLISH_NOTE_URL,
@@ -99,7 +104,7 @@ export class XiaohongshuNoteUploader extends XiaohongshuBaseUploader {
     await this.clickPublish(page);
   }
 
-  async upload(): Promise<void> {
+  async upload(): Promise<WorkLink | null> {
     this.logger.log('检查 cookie、图片和发布时间');
     await this.validateUploadArgs();
     this.logger.log('图文上传前检查通过');
@@ -115,15 +120,35 @@ export class XiaohongshuNoteUploader extends XiaohongshuBaseUploader {
     });
     await this.browserService.addStealthScript(context);
 
+    let workLink: WorkLink | null = null;
     const page = await context.newPage();
+    this.workLinkSniffer = attachWorkLinkSniffer(
+      page,
+      'xiaohongshu',
+      this.logger,
+    );
     try {
       await this.uploadNoteContent(page);
+      const scheduled =
+        this.publishStrategy === XIAOHONGSHU_PUBLISH_STRATEGY_SCHEDULED &&
+        this.publishDate !== 0;
+      if (!scheduled) {
+        workLink = await finishPublicWorkLink(
+          this.workLinkSniffer,
+          page,
+          this.logger,
+          'xiaohongshu',
+          this.accountFile,
+        );
+      }
       await context.storageState({ path: this.accountFile });
       await sleep(2000);
     } finally {
+      this.workLinkSniffer.dispose();
       await page.close().catch(() => undefined);
       await context.close().catch(() => undefined);
       await browser.close().catch(() => undefined);
     }
+    return workLink;
   }
 }

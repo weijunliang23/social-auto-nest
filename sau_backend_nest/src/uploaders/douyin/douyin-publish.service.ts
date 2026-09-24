@@ -16,6 +16,8 @@ import {
 } from './douyin.constants';
 import { DouyinNoteUploader } from './douyin-note.uploader';
 import { DouyinVideoUploader } from './douyin-video.uploader';
+import type { WorkLink } from '../work-link';
+import { withAccount } from '../work-link';
 
 /** 封装抖音发布循环，供 PublishProcessor 调用 */
 @Injectable()
@@ -37,7 +39,7 @@ export class DouyinPublishService {
     return join(userCookiesDir(this.app.baseDir, ownerId), filename);
   }
 
-  async publishVideo(payload: PublishJobPayload): Promise<void> {
+  async publishVideo(payload: PublishJobPayload): Promise<WorkLink[]> {
     const {
       ownerId,
       title,
@@ -66,6 +68,7 @@ export class DouyinPublishService {
       publishDatetimes = fileList.map(() => 0 as const);
     }
 
+    const links: WorkLink[] = [];
     for (let index = 0; index < fileList.length; index++) {
       const file = fileList[index];
       const filePath = this.videoPath(ownerId, file);
@@ -95,12 +98,17 @@ export class DouyinPublishService {
             browserPublish,
           },
         );
-        await uploader.upload();
+        await uploader.upload().then((captured) => {
+          if (captured) {
+            links.push(withAccount(captured, account, file));
+          }
+        });
       }
     }
+    return links;
   }
 
-  async publishNote(payload: PublishJobPayload): Promise<void> {
+  async publishNote(payload: PublishJobPayload): Promise<WorkLink[]> {
     const {
       ownerId,
       title,
@@ -126,6 +134,7 @@ export class DouyinPublishService {
       ? DOUYIN_PUBLISH_STRATEGY_SCHEDULED
       : DOUYIN_PUBLISH_STRATEGY_IMMEDIATE;
 
+    const links: WorkLink[] = [];
     for (const account of accountList) {
       const accountFile = this.cookiePath(ownerId, account);
       this.logger.log(`发布图文 account=${account} title=${title}`);
@@ -144,7 +153,12 @@ export class DouyinPublishService {
           browserPublish,
         },
       );
-      await uploader.upload();
+      await uploader.upload().then((captured) => {
+        if (captured) {
+          links.push(withAccount(captured, account));
+        }
+      });
     }
+    return links;
   }
 }

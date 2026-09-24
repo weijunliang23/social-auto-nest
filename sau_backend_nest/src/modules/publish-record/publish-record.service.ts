@@ -4,6 +4,7 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Queue } from 'bullmq';
 import { Model, Types } from 'mongoose';
 import { PublishRecord } from '../../database/schemas/publish-record.schema';
+import type { WorkLink } from '../../uploaders/work-link';
 import { PlatformAccount } from '../../database/schemas/platform-account.schema';
 import type { PublishJobPayload } from '../../queue/publish-job.types';
 import { PUBLISH_QUEUE_NAME } from '../../queue/publish.queue';
@@ -82,6 +83,7 @@ export class PublishRecordService {
       schedule_enabled: row.schedule_enabled ? 1 : 0,
       schedule_config: row.schedule_config,
       extra_config: row.extra_config,
+      work_links: row.work_links ?? [],
       created_at: row.created_at,
     };
 
@@ -168,10 +170,18 @@ export class PublishRecordService {
     recordId: string,
     status: 'queued' | 'running' | 'success' | 'failed',
     statusMessage: string,
+    workLinks?: WorkLink[],
   ): Promise<void> {
+    const $set: Record<string, unknown> = {
+      status,
+      status_message: statusMessage,
+    };
+    if (workLinks) {
+      $set.work_links = workLinks;
+    }
     await this.publishRecordModel.updateOne(
       { _id: recordId, status: { $ne: 'cancelled' } },
-      { status, status_message: statusMessage },
+      { $set },
     );
   }
 
@@ -306,7 +316,7 @@ export class PublishRecordService {
 
       await this.publishRecordModel.updateOne(
         { _id: recordId, ownerId: toObjectId(ownerId) },
-        { status: 'queued', status_message: retryMessage },
+        { status: 'queued', status_message: retryMessage, work_links: [] },
       );
 
       await this.publishQueue.add('publish', payload, {

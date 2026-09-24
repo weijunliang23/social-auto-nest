@@ -1,8 +1,11 @@
+import { basename } from 'path';
 import type { AuthService } from '../../modules/account/auth.service';
 import type { AppConfig } from '../../config/app-config.interface';
 import type { BrowserService } from '../../shared/browser/browser.service';
 import { BaseUploader } from '../base/base-uploader';
+import type { WorkLink } from '../work-link';
 import { TencentBaseUploader } from './tencent-base.uploader';
+import { TENCENT_POST_LIST_URL } from './tencent.constants';
 
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
@@ -48,7 +51,7 @@ export class TencentVideoUploader extends TencentBaseUploader {
     this.filePath = BaseUploader.validateVideoFile(this.filePath);
   }
 
-  async upload(): Promise<void> {
+  async upload(): Promise<WorkLink | null> {
     this.logger.log('检查 cookie、视频文件和发布时间');
     await this.validateUploadArgs();
     this.logger.log('上传前检查通过');
@@ -65,6 +68,7 @@ export class TencentVideoUploader extends TencentBaseUploader {
     await this.browserService.addStealthScript(context);
 
     let uploadSuccess = false;
+    let workLink: WorkLink | null = null;
     const page = await context.newPage();
     page.setDefaultTimeout(60000);
     try {
@@ -83,6 +87,14 @@ export class TencentVideoUploader extends TencentBaseUploader {
       await this.addShortTitle(page, this.title);
       await this.clickPublish(page, this.isDraft);
       uploadSuccess = true;
+      if (!this.isDraft) {
+        workLink = {
+          account: basename(this.accountFile),
+          file: basename(this.filePath),
+          url: TENCENT_POST_LIST_URL,
+          kind: 'creator',
+        };
+      }
     } finally {
       if (uploadSuccess) {
         await context.storageState({ path: this.accountFile });
@@ -93,5 +105,6 @@ export class TencentVideoUploader extends TencentBaseUploader {
       await context.close().catch(() => undefined);
       await browser.close().catch(() => undefined);
     }
+    return workLink;
   }
 }
