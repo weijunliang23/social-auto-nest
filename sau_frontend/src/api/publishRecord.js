@@ -30,6 +30,10 @@ export const publishRecordApi = {
     return http.get('/getPublishRecords', params)
   },
 
+  retryPublishRecord: (id) => {
+    return http.get(`/retryPublishRecord?id=${id}`)
+  },
+
   deletePublishRecord: (id) => {
     return http.get(`/deletePublishRecord?id=${id}`)
   },

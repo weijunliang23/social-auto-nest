@@ -80,9 +80,18 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="160" fixed="right">
+          <el-table-column label="操作" width="240" fixed="right">
             <template #default="scope">
               <el-button size="small" @click="handleViewDetail(scope.row)">详情</el-button>
+              <el-button
+                v-if="scope.row.status === 'failed'"
+                size="small"
+                type="warning"
+                :loading="retryingRecordId === scope.row.id"
+                @click="handleRetryFromList(scope.row)"
+              >
+                重试
+              </el-button>
               <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
             </template>
           </el-table-column>
@@ -176,15 +185,33 @@
           <span class="multiline">{{ currentRecord.status_message }}</span>
         </div>
       </div>
+      <template #footer>
+        <el-button @click="detailDialogVisible = false">关闭</el-button>
+        <el-button
+          v-if="currentRecord?.status === 'failed'"
+          type="primary"
+          :loading="retryingRecordId === currentRecord?.id"
+          @click="handleRetryFromDetail"
+        >
+          重试
+        </el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { accountApi } from '@/api/account'
 import { publishRecordApi } from '@/api/publishRecord'
+import { useAccountStore } from '@/stores/account'
+import { waitAndHandlePublishJob } from '@/utils/runPublishJob'
+
+const router = useRouter()
+const accountStore = useAccountStore()
 
 const records = ref([])
 const total = ref(0)
@@ -197,6 +224,7 @@ const filterStatus = ref('')
 const isRefreshing = ref(false)
 const detailDialogVisible = ref(false)
 const currentRecord = ref(null)
+const retryingRecordId = ref(null)
 
 const platformTagMap = {
   '小红书': 'info',
@@ -316,6 +344,84 @@ const handleSearch = () => {
 const handleViewDetail = (record) => {
   currentRecord.value = record
   detailDialogVisible.value = true
+}
+
+const ensureAccountsLoaded = async () => {
+  if (accountStore.accounts.length > 0) {
+    return
+  }
+  const res = await accountApi.getAccounts()
+  if (res.code === 200 && res.data) {
+    accountStore.setAccounts(res.data)
+  }
+}
+
+const refreshRecordInView = async (recordId) => {
+  const detailRes = await publishRecordApi.getPublishRecord(recordId)
+  if (detailRes.code === 200 && detailRes.data) {
+    if (currentRecord.value?.id === recordId) {
+      currentRecord.value = detailRes.data
+    }
+    const idx = records.value.findIndex((r) => r.id === recordId)
+    if (idx !== -1) {
+      records.value[idx] = detailRes.data
+    }
+  }
+}
+
+const runRetry = async (record) => {
+  if (record.status !== 'failed') {
+    return
+  }
+  await ensureAccountsLoaded()
+  retryingRecordId.value = record.id
+  try {
+    const retryRes = await publishRecordApi.retryPublishRecord(record.id)
+    if (retryRes.code !== 200) {
+      ElMessage.error(retryRes.msg || '重试提交失败')
+      return
+    }
+    const recordId = retryRes.data?.recordId || record.id
+    await waitAndHandlePublishJob(recordId, {
+      accountStore,
+      router,
+      successLabel: '重试发布成功'
+    })
+    await fetchRecords()
+    await refreshRecordInView(record.id)
+  } catch (error) {
+    console.error('重试发布出错:', error)
+    ElMessage.error(error.message || '重试失败')
+    await fetchRecords()
+  } finally {
+    retryingRecordId.value = null
+  }
+}
+
+const handleRetryFromList = async (record) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要重试发布「${record.title}」吗？将使用原记录的账号与素材再次提交。`,
+      '重试确认',
+      {
+        confirmButtonText: '确定重试',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    await runRetry(record)
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('重试确认出错:', error)
+    }
+  }
+}
+
+const handleRetryFromDetail = async () => {
+  if (!currentRecord.value) {
+    return
+  }
+  await runRetry(currentRecord.value)
 }
 
 const handleDelete = async (record) => {

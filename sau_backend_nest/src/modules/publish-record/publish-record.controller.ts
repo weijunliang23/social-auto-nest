@@ -67,6 +67,23 @@ export class PublishRecordController {
     );
   }
 
+  @Get('retryPublishRecord')
+  @ApiOperation({
+    summary: '重试失败的发布记录',
+    description: '复用同一条 publish_records 记录重新入队执行',
+  })
+  @ApiResponse({ status: 200, description: '重试已提交', type: ApiResponseDto })
+  async retryPublishRecord(
+    @CurrentUser() user: AuthUser,
+    @Query() query: GetPublishRecordQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    this.sendJson(
+      res,
+      await this.publishRecordService.retryPublishRecord(user.userId, query.id),
+    );
+  }
+
   @Get('deletePublishRecord')
   @ApiOperation({
     summary: '取消发布记录',

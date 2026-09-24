@@ -12,7 +12,10 @@ import {
   apiOk,
   type ApiResponse,
 } from '../../shared/api-response.util';
+import { MEDIA_TYPE } from '../../shared/platform.constants';
 import { isValidObjectId, toObjectId } from '../../shared/utils/object-id.util';
+import { AccountService } from '../account/account.service';
+import { MaterialService } from '../material/material.service';
 
 const PLATFORM_NAMES: Record<number, string> = {
   1: '小红书',
@@ -56,6 +59,8 @@ export class PublishRecordService {
     private readonly platformAccountModel: Model<PlatformAccount>,
     @InjectQueue(PUBLISH_QUEUE_NAME)
     private readonly publishQueue: Queue<PublishJobPayload>,
+    private readonly accountService: AccountService,
+    private readonly materialService: MaterialService,
   ) {}
 
   /** 解析记录并附加中文标签，兼容前端 snake_case 字段 */
@@ -168,6 +173,141 @@ export class PublishRecordService {
       { _id: recordId, status: { $ne: 'cancelled' } },
       { status, status_message: statusMessage },
     );
+  }
+
+  /** 由 DB 记录还原 BullMQ 任务 payload */
+  private buildJobPayloadFromRecord(
+    record: PublishRecord & { _id: unknown },
+    ownerId: string,
+    recordId: string,
+  ): PublishJobPayload {
+    const schedule = (record.schedule_config ?? {}) as Record<string, unknown>;
+    const extra = (record.extra_config ?? {}) as Record<string, unknown>;
+    const platformType = record.platform_type;
+
+    let browserPublish = extra.browserPublish as boolean | undefined;
+    if (browserPublish === undefined) {
+      browserPublish = platformType === MEDIA_TYPE.TENCENT;
+    }
+
+    const payload: PublishJobPayload = {
+      recordId,
+      ownerId,
+      kind: record.publish_kind,
+      platformType,
+      title: record.title,
+      tags: record.tags ?? [],
+      fileList: record.file_list,
+      accountList: record.account_list,
+      enableTimer: record.schedule_enabled ? 1 : 0,
+      videosPerDay: (schedule.videosPerDay as number | undefined) ?? 1,
+      dailyTimes: (schedule.dailyTimes as (string | number)[] | undefined) ?? [
+        '10:00',
+      ],
+      startDays: (schedule.startDays as number | undefined) ?? 0,
+      browserPublish,
+    };
+
+    if (record.publish_kind === 'note') {
+      payload.note = record.note_body ?? '';
+    } else {
+      let category = extra.category as number | null | undefined;
+      if (category === 0) {
+        category = null;
+      }
+      payload.category = category ?? null;
+      payload.isDraft = Boolean(extra.isDraft);
+      payload.productLink = (extra.productLink as string | undefined) ?? '';
+      payload.productTitle = (extra.productTitle as string | undefined) ?? '';
+      payload.thumbnail = (extra.thumbnail as string | undefined) ?? '';
+    }
+
+    return payload;
+  }
+
+  /** 重试前移除已结束的 job，以便复用 jobId */
+  private async removePublishJobForRetry(recordId: string): Promise<void> {
+    const job = await this.publishQueue.getJob(`publish-${recordId}`);
+    if (!job) {
+      return;
+    }
+    const state = await job.getState();
+    const blocking = new Set(['active', 'waiting', 'delayed', 'prioritized']);
+    if (blocking.has(state)) {
+      throw new Error('任务进行中，请稍后再试');
+    }
+    await job.remove();
+    this.logger.log(
+      `Removed job publish-${recordId} for retry (state=${state})`,
+    );
+  }
+
+  /** 失败记录重试：复用同一 recordId 重新入队 */
+  async retryPublishRecord(
+    ownerId: string,
+    recordId: string | undefined,
+  ): Promise<ApiResponse<{ recordId: string }>> {
+    if (!isValidObjectId(recordId)) {
+      return apiErr(400, 'Invalid or missing record ID');
+    }
+
+    try {
+      const record = await this.getRecordById(recordId!, ownerId);
+      if (!record) {
+        return apiErr(404, 'Record not found');
+      }
+      if (record.status !== 'failed') {
+        return apiErr(400, '仅失败状态的记录可重试');
+      }
+
+      const accountsOk = await this.accountService.validateAccountOwnership(
+        ownerId,
+        record.account_list,
+      );
+      if (!accountsOk) {
+        return apiErr(403, '账号列表包含无权使用的 Cookie 或账号已删除');
+      }
+
+      const materialsOk = await this.materialService.validateMaterialOwnership(
+        ownerId,
+        record.file_list,
+      );
+      if (!materialsOk) {
+        return apiErr(403, '素材列表包含无权使用的文件或素材已删除');
+      }
+
+      await this.removePublishJobForRetry(recordId!);
+
+      const payload = this.buildJobPayloadFromRecord(
+        record,
+        ownerId,
+        recordId!,
+      );
+      const retryMessage =
+        record.publish_kind === 'note'
+          ? '图文发布重试任务已提交'
+          : '发布重试任务已提交';
+
+      await this.publishRecordModel.updateOne(
+        { _id: recordId, ownerId: toObjectId(ownerId) },
+        { status: 'queued', status_message: retryMessage },
+      );
+
+      await this.publishQueue.add('publish', payload, {
+        jobId: `publish-${recordId}`,
+        removeOnComplete: true,
+        removeOnFail: false,
+      });
+
+      return apiOk({ recordId: recordId! }, retryMessage);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('任务进行中')) {
+        return apiErr(409, msg);
+      }
+      this.logger.error(`重试发布 recordId=${recordId}: ${msg}`);
+      return apiErr(500, `重试失败: ${msg}`);
+    }
   }
 
   /** 从 BullMQ 移除排队中的 job */
