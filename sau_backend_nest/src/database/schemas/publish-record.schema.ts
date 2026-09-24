@@ -3,6 +3,34 @@ import { HydratedDocument, Types } from 'mongoose';
 
 export type PublishRecordDocument = HydratedDocument<PublishRecord>;
 
+export type WorkStatMatch = 'id' | 'title' | 'unmatched';
+
+export interface WorkStat {
+  account: string;
+  play_count?: number | null;
+  like_count?: number | null;
+  comment_count?: number | null;
+  collect_count?: number | null;
+  share_count?: number | null;
+  match: WorkStatMatch;
+  synced_at?: Date | null;
+}
+
+export type EngagementSyncStatus =
+  | 'idle'
+  | 'queued'
+  | 'running'
+  | 'ok'
+  | 'failed'
+  | 'unsupported';
+
+export interface EngagementSyncState {
+  status: EngagementSyncStatus;
+  message?: string;
+  requested_at?: Date | null;
+  finished_at?: Date | null;
+}
+
 @Schema({ collection: 'publish_records', timestamps: { createdAt: 'created_at', updatedAt: false } })
 export class PublishRecord {
   @Prop({ type: Types.ObjectId, ref: 'AppUser', required: true, index: true })
@@ -65,6 +93,52 @@ export class PublishRecord {
     url: string;
     kind: 'public' | 'creator';
   }[];
+
+  /** 按账号拆分的播放 / 互动快照 */
+  @Prop({
+    type: [
+      {
+        _id: false,
+        account: { type: String, required: true },
+        play_count: { type: Number, default: null },
+        like_count: { type: Number, default: null },
+        comment_count: { type: Number, default: null },
+        collect_count: { type: Number, default: null },
+        share_count: { type: Number, default: null },
+        match: {
+          type: String,
+          enum: ['id', 'title', 'unmatched'],
+          required: true,
+        },
+        synced_at: { type: Date, default: null },
+      },
+    ],
+    default: [],
+  })
+  work_stats!: WorkStat[];
+
+  @Prop({
+    type: {
+      _id: false,
+      status: {
+        type: String,
+        enum: ['idle', 'queued', 'running', 'ok', 'failed', 'unsupported'],
+        default: 'idle',
+      },
+      message: { type: String, default: '' },
+      requested_at: { type: Date, default: null },
+      finished_at: { type: Date, default: null },
+    },
+    default: () => ({
+      status: 'idle',
+      message: '',
+      requested_at: null,
+      finished_at: null,
+    }),
+  })
+  engagement_sync!: EngagementSyncState;
+
+  created_at?: Date;
 }
 
 export const PublishRecordSchema =

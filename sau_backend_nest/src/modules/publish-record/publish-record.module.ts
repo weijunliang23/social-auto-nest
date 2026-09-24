@@ -1,5 +1,6 @@
 import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
+import { ENGAGEMENT_SYNC_QUEUE_NAME } from '../../queue/engagement-sync.queue';
 import { PUBLISH_QUEUE_NAME } from '../../queue/publish.queue';
 import { AccountModule } from '../account/account.module';
 import { MaterialModule } from '../material/material.module';
@@ -12,6 +13,7 @@ import { PublishRecordService } from './publish-record.service';
     AccountModule,
     MaterialModule,
     BullModule.registerQueue({ name: PUBLISH_QUEUE_NAME }),
+    BullModule.registerQueue({ name: ENGAGEMENT_SYNC_QUEUE_NAME }),
   ],
   controllers: [PublishRecordController],
   providers: [PublishRecordService],

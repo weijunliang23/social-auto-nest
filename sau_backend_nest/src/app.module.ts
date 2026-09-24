@@ -10,6 +10,7 @@ import { PublishModule } from './modules/publish/publish.module';
 import { PublishRecordModule } from './modules/publish-record/publish-record.module';
 import { QueueModule } from './queue/queue.module';
 import { BrowserModule } from './shared/browser/browser.module';
+import { LockModule } from './shared/lock/lock.module';
 
 @Module({
   imports: [
@@ -17,6 +18,7 @@ import { BrowserModule } from './shared/browser/browser.module';
     DatabaseModule,
     AuthModule,
     BrowserModule,
+    LockModule,
     QueueModule,
     MaterialModule,
     AccountModule,

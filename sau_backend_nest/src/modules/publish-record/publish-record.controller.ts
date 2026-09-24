@@ -96,6 +96,27 @@ export class PublishRecordController {
     return normalized === 'true' || normalized === '1';
   }
 
+  @Get('refreshPublishStats')
+  @ApiOperation({
+    summary: '刷新发布记录的播放与互动',
+    description:
+      '入队后从创作者中心拉取播放/赞/评/藏；小红书、抖音、快手可用，视频号不支持；同一记录 3 分钟冷却',
+  })
+  @ApiResponse({ status: 200, description: '刷新已提交', type: ApiResponseDto })
+  async refreshPublishStats(
+    @CurrentUser() user: AuthUser,
+    @Query() query: GetPublishRecordQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    this.sendJson(
+      res,
+      await this.publishRecordService.refreshPublishStats(
+        user.userId,
+        query.id,
+      ),
+    );
+  }
+
   @Get('deletePublishRecord')
   @ApiOperation({
     summary: '取消发布记录',

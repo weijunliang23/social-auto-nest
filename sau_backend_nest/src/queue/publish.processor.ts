@@ -2,6 +2,7 @@ import { Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { PublishRecordService } from '../modules/publish-record/publish-record.service';
+import { AccountCookieLockService } from '../shared/lock/account-cookie-lock.service';
 import { MEDIA_TYPE } from '../shared/platform.constants';
 import { DouyinPublishService } from '../uploaders/douyin/douyin-publish.service';
 import { KuaishouPublishService } from '../uploaders/kuaishou/kuaishou-publish.service';
@@ -17,6 +18,7 @@ export class PublishProcessor extends WorkerHost {
 
   constructor(
     private readonly publishRecordService: PublishRecordService,
+    private readonly accountCookieLock: AccountCookieLockService,
     private readonly douyinPublishService: DouyinPublishService,
     private readonly kuaishouPublishService: KuaishouPublishService,
     private readonly xiaohongshuPublishService: XiaohongshuPublishService,
@@ -26,7 +28,7 @@ export class PublishProcessor extends WorkerHost {
   }
 
   async process(job: Job<PublishJobPayload>): Promise<void> {
-    const { recordId, kind, platformType } = job.data;
+    const { recordId, kind, platformType, ownerId, accountList } = job.data;
     this.logger.log(
       `Processing publish job ${job.id} recordId=${recordId} kind=${kind} platform=${platformType}`,
     );
@@ -44,42 +46,14 @@ export class PublishProcessor extends WorkerHost {
 
     try {
       let workLinks: WorkLink[] = [];
-      switch (platformType) {
-        case MEDIA_TYPE.DOUYIN:
-          if (kind === 'video') {
-            workLinks = await this.douyinPublishService.publishVideo(job.data);
-          } else {
-            workLinks = await this.douyinPublishService.publishNote(job.data);
-          }
-          break;
-        case MEDIA_TYPE.KUAISHOU:
-          if (kind === 'video') {
-            workLinks = await this.kuaishouPublishService.publishVideo(job.data);
-          } else {
-            workLinks = await this.kuaishouPublishService.publishNote(job.data);
-          }
-          break;
-        case MEDIA_TYPE.XHS:
-          if (kind === 'video') {
-            workLinks = await this.xiaohongshuPublishService.publishVideo(
-              job.data,
-            );
-          } else {
-            workLinks = await this.xiaohongshuPublishService.publishNote(
-              job.data,
-            );
-          }
-          break;
-        case MEDIA_TYPE.TENCENT:
-          if (kind !== 'video') {
-            throw new Error('视频号不支持图文发布');
-          }
-          workLinks = await this.tencentPublishService.publishVideo(job.data);
-          break;
-        default:
-          throw new Error(`不支持的平台: ${platformType}`);
-      }
-
+      await this.accountCookieLock.withAccountLocks(
+        ownerId,
+        accountList,
+        async () => {
+          workLinks = await this.runPublish(job.data);
+        },
+        15 * 60 * 1000,
+      );
       if (await this.publishRecordService.isRecordCancelled(recordId)) {
         this.logger.log(
           `Job ${job.id} finished but record cancelled, skip success update`,
@@ -108,5 +82,33 @@ export class PublishProcessor extends WorkerHost {
       );
       throw e;
     }
+  }
+
+  private async runPublish(data: PublishJobPayload): Promise<WorkLink[]> {
+    const { kind, platformType } = data;
+    switch (platformType) {
+        case MEDIA_TYPE.DOUYIN:
+          if (kind === 'video') {
+            return this.douyinPublishService.publishVideo(data);
+          }
+          return this.douyinPublishService.publishNote(data);
+        case MEDIA_TYPE.KUAISHOU:
+          if (kind === 'video') {
+            return this.kuaishouPublishService.publishVideo(data);
+          }
+          return this.kuaishouPublishService.publishNote(data);
+        case MEDIA_TYPE.XHS:
+          if (kind === 'video') {
+            return this.xiaohongshuPublishService.publishVideo(data);
+          }
+          return this.xiaohongshuPublishService.publishNote(data);
+        case MEDIA_TYPE.TENCENT:
+          if (kind !== 'video') {
+            throw new Error('视频号不支持图文发布');
+          }
+          return this.tencentPublishService.publishVideo(data);
+        default:
+          throw new Error(`不支持的平台: ${platformType}`);
+      }
   }
 }

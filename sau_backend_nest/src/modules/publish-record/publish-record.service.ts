@@ -2,12 +2,23 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Queue } from 'bullmq';
-import { Model, Types } from 'mongoose';
-import { PublishRecord } from '../../database/schemas/publish-record.schema';
+import { Model } from 'mongoose';
+import {
+  PublishRecord,
+  type EngagementSyncState,
+  type EngagementSyncStatus,
+  type WorkStat,
+} from '../../database/schemas/publish-record.schema';
 import type { WorkLink } from '../../uploaders/work-link';
 import { PlatformAccount } from '../../database/schemas/platform-account.schema';
+import type { EngagementSyncJobPayload } from '../../queue/engagement-sync.job.types';
+import {
+  ENGAGEMENT_COOLDOWN_MS,
+  ENGAGEMENT_SYNC_QUEUE_NAME,
+} from '../../queue/engagement-sync.queue';
 import type { PublishJobPayload } from '../../queue/publish-job.types';
 import { PUBLISH_QUEUE_NAME } from '../../queue/publish.queue';
+import { normalizeDailyTimesHours } from '../../shared/schedule/schedule.util';
 import {
   apiErr,
   apiOk,
@@ -60,6 +71,8 @@ export class PublishRecordService {
     private readonly platformAccountModel: Model<PlatformAccount>,
     @InjectQueue(PUBLISH_QUEUE_NAME)
     private readonly publishQueue: Queue<PublishJobPayload>,
+    @InjectQueue(ENGAGEMENT_SYNC_QUEUE_NAME)
+    private readonly engagementQueue: Queue<EngagementSyncJobPayload>,
     private readonly accountService: AccountService,
     private readonly materialService: MaterialService,
   ) { }
@@ -84,6 +97,7 @@ export class PublishRecordService {
       schedule_config: row.schedule_config,
       extra_config: row.extra_config,
       work_links: row.work_links ?? [],
+      work_stats: row.work_stats ?? [],
       created_at: row.created_at,
     };
 
@@ -93,7 +107,74 @@ export class PublishRecordService {
       record.publish_kind === 'note' ? '图文' : '视频';
     const status = String(record.status ?? '');
     record.status_label = STATUS_LABELS[status] ?? status;
+    record.engagement_supported = platformType !== MEDIA_TYPE.TENCENT;
+    record.engagement_sync = this.serializeEngagementSync(
+      row.engagement_sync,
+    );
+    record.work_stats_total = this.sumWorkStats(row.work_stats ?? []);
     return record;
+  }
+
+  private serializeEngagementSync(
+    sync?: EngagementSyncState,
+  ): Record<string, unknown> {
+    const requestedAt = sync?.requested_at ?? null;
+    let cooldownRemainSec = 0;
+    if (requestedAt) {
+      const remain = ENGAGEMENT_COOLDOWN_MS - (Date.now() - new Date(requestedAt).getTime());
+      cooldownRemainSec = remain > 0 ? Math.ceil(remain / 1000) : 0;
+    }
+    return {
+      status: sync?.status ?? 'idle',
+      message: sync?.message ?? '',
+      requested_at: requestedAt,
+      finished_at: sync?.finished_at ?? null,
+      cooldown_remain_sec: cooldownRemainSec,
+    };
+  }
+
+  private sumWorkStats(stats: WorkStat[]): Record<string, number | null> {
+    const keys = [
+      'play_count',
+      'like_count',
+      'comment_count',
+      'collect_count',
+      'share_count',
+    ] as const;
+    const total: Record<string, number | null> = {};
+    for (const key of keys) {
+      let sum = 0;
+      let any = false;
+      for (const row of stats) {
+        const value = row[key];
+        if (value != null) {
+          sum += value;
+          any = true;
+        }
+      }
+      total[key] = any ? sum : null;
+    }
+    return total;
+  }
+
+  estimatePublishedAt(record: {
+    created_at?: Date;
+    schedule_enabled?: boolean;
+    schedule_config?: Record<string, unknown>;
+  }): Date {
+    const created =
+      record.created_at instanceof Date ? record.created_at : new Date();
+    if (!record.schedule_enabled) {
+      return created;
+    }
+    const hours = normalizeDailyTimesHours(
+      record.schedule_config?.dailyTimes as (string | number)[] | undefined,
+    );
+    const startDays = Number(record.schedule_config?.startDays ?? 0);
+    const expected = new Date(created);
+    expected.setDate(expected.getDate() + startDays + 1);
+    expected.setHours(hours[0] ?? 10, 0, 0, 0);
+    return expected;
   }
 
   /** 按 ID 查询原始记录 */
@@ -316,7 +397,18 @@ export class PublishRecordService {
 
       await this.publishRecordModel.updateOne(
         { _id: recordId, ownerId: toObjectId(ownerId) },
-        { status: 'queued', status_message: retryMessage, work_links: [] },
+        {
+          status: 'queued',
+          status_message: retryMessage,
+          work_links: [],
+          work_stats: [],
+          engagement_sync: {
+            status: 'idle',
+            message: '',
+            requested_at: null,
+            finished_at: null,
+          },
+        },
       );
 
       await this.publishQueue.add('publish', payload, {
@@ -465,6 +557,213 @@ export class PublishRecordService {
         `获取发布记录失败: ${e instanceof Error ? e.message : String(e)}`,
       );
     }
+  }
+
+  async refreshPublishStats(
+    ownerId: string,
+    recordId: string | undefined,
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    if (!isValidObjectId(recordId)) {
+      return apiErr(400, 'Invalid or missing record ID');
+    }
+
+    try {
+      const record = await this.getRecordById(recordId!, ownerId);
+      if (!record) {
+        return apiErr(404, 'Record not found');
+      }
+      if (record.platform_type === MEDIA_TYPE.TENCENT) {
+        await this.publishRecordModel.updateOne(
+          { _id: recordId, ownerId: toObjectId(ownerId) },
+          {
+            engagement_sync: {
+              status: 'unsupported',
+              message: '视频号暂不支持刷新播放与互动',
+              requested_at: record.engagement_sync?.requested_at ?? null,
+              finished_at: new Date(),
+            },
+          },
+        );
+        return apiErr(400, '视频号暂不支持刷新播放与互动');
+      }
+      if (record.status !== 'success') {
+        return apiErr(400, '仅成功的发布记录可刷新数据');
+      }
+
+      const syncStatus = record.engagement_sync?.status;
+      if (syncStatus === 'queued' || syncStatus === 'running') {
+        return apiErr(409, '该记录正在刷新数据');
+      }
+
+      const requestedAt = record.engagement_sync?.requested_at;
+      if (requestedAt) {
+        const elapsed = Date.now() - new Date(requestedAt).getTime();
+        if (elapsed < ENGAGEMENT_COOLDOWN_MS) {
+          const remain = Math.ceil((ENGAGEMENT_COOLDOWN_MS - elapsed) / 1000);
+          return apiErr(429, `刷新冷却中，请 ${remain} 秒后再试`);
+        }
+      }
+
+      const accountsOk = await this.accountService.validateAccountOwnership(
+        ownerId,
+        record.account_list,
+      );
+      if (!accountsOk) {
+        return apiErr(403, '账号列表包含无权使用的 Cookie 或账号已删除');
+      }
+
+      await this.removeEngagementJobIfFinished(recordId!);
+
+      const now = new Date();
+      await this.publishRecordModel.updateOne(
+        { _id: recordId, ownerId: toObjectId(ownerId) },
+        {
+          engagement_sync: {
+            status: 'queued',
+            message: '数据刷新已提交',
+            requested_at: now,
+            finished_at: null,
+          },
+        },
+      );
+
+      try {
+        await this.engagementQueue.add(
+          'engagement-sync',
+          { recordId: recordId!, ownerId },
+          {
+            jobId: `engagement-${recordId}`,
+            attempts: 1,
+            removeOnComplete: true,
+            removeOnFail: false,
+          },
+        );
+      } catch (e) {
+        await this.publishRecordModel.updateOne(
+          { _id: recordId, ownerId: toObjectId(ownerId) },
+          {
+            'engagement_sync.status': 'failed',
+            'engagement_sync.message':
+              e instanceof Error ? e.message : String(e),
+            'engagement_sync.finished_at': new Date(),
+          },
+        );
+        throw e;
+      }
+
+      const row = await this.getRecordById(recordId!, ownerId);
+      return apiOk(
+        row ? this.parsePublishRecordRow(row) : { id: recordId },
+        '数据刷新已提交',
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (msg.includes('正在刷新')) {
+        return apiErr(409, msg);
+      }
+      this.logger.error(`刷新播放互动 recordId=${recordId}: ${msg}`);
+      return apiErr(500, `刷新失败: ${msg}`);
+    }
+  }
+
+  private async removeEngagementJobIfFinished(recordId: string): Promise<void> {
+    const job = await this.engagementQueue.getJob(`engagement-${recordId}`);
+    if (!job) {
+      return;
+    }
+    const state = await job.getState();
+    const blocking = new Set(['active', 'waiting', 'delayed', 'prioritized']);
+    if (blocking.has(state)) {
+      throw new Error('该记录正在刷新数据');
+    }
+    await job.remove();
+  }
+
+  async markEngagementRunning(
+    recordId: string,
+    ownerId: string,
+  ): Promise<void> {
+    await this.publishRecordModel.updateOne(
+      { _id: recordId, ownerId: toObjectId(ownerId) },
+      {
+        'engagement_sync.status': 'running',
+        'engagement_sync.message': '正在从创作者中心拉取播放与互动',
+      },
+    );
+  }
+
+  async finishEngagementSync(
+    recordId: string,
+    ownerId: string,
+    status: EngagementSyncStatus,
+    message: string,
+  ): Promise<void> {
+    await this.publishRecordModel.updateOne(
+      { _id: recordId, ownerId: toObjectId(ownerId) },
+      {
+        'engagement_sync.status': status,
+        'engagement_sync.message': message,
+        'engagement_sync.finished_at': new Date(),
+      },
+    );
+  }
+
+  async saveEngagementResult(
+    recordId: string,
+    ownerId: string,
+    workStats: WorkStat[],
+    workLinks: WorkLink[],
+    status: EngagementSyncStatus,
+    message: string,
+  ): Promise<void> {
+    const record = await this.getRecordById(recordId, ownerId);
+    const mergedLinks = this.mergeWorkLinks(record?.work_links ?? [], workLinks);
+    await this.publishRecordModel.updateOne(
+      { _id: recordId, ownerId: toObjectId(ownerId) },
+      {
+        work_stats: workStats,
+        work_links: mergedLinks,
+        engagement_sync: {
+          status,
+          message,
+          requested_at: record?.engagement_sync?.requested_at ?? new Date(),
+          finished_at: new Date(),
+        },
+      },
+    );
+  }
+
+  private mergeWorkLinks(
+    existing: WorkLink[],
+    incoming: WorkLink[],
+  ): WorkLink[] {
+    const next: WorkLink[] = existing.map((item) => ({
+      account: item.account,
+      url: item.url,
+      kind: item.kind,
+      ...(item.file ? { file: item.file } : {}),
+    }));
+    for (const link of incoming) {
+      if (!link?.url) {
+        continue;
+      }
+      const index = next.findIndex((item) => item.account === link.account);
+      if (index >= 0) {
+        next[index] = {
+          ...next[index],
+          url: link.url,
+          kind: link.kind,
+        };
+      } else {
+        next.push({
+          account: link.account,
+          url: link.url,
+          kind: link.kind,
+          ...(link.file ? { file: link.file } : {}),
+        });
+      }
+    }
+    return next;
   }
 
   /** 软取消发布记录，并从队列移除 waiting 中的 job */

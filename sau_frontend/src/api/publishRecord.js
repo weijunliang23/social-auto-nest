@@ -41,4 +41,8 @@ export const publishRecordApi = {
   deletePublishRecord: (id) => {
     return http.get(`/deletePublishRecord?id=${id}`)
   },
+
+  refreshPublishStats: (id) => {
+    return http.get('/refreshPublishStats', { id })
+  },
 }

@@ -84,10 +84,47 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="168" fixed="right" align="right">
+          <el-table-column label="播放" width="100">
+            <template #default="scope">
+              {{ formatPlayCount(scope.row) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="互动" min-width="168">
+            <template #default="scope">
+              {{ formatInteract(scope.row) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="同步" width="108">
+            <template #default="scope">
+              {{ formatSyncLabel(scope.row) }}
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="236" fixed="right" align="right">
             <template #default="scope">
               <div class="table-action-cell">
                 <el-button link type="primary" @click="handleViewDetail(scope.row)">详情</el-button>
+                <template v-if="canRefreshStats(scope.row)">
+                  <el-divider direction="vertical" />
+                  <el-tooltip
+                    v-if="isEngagementCooling(scope.row)"
+                    :content="`冷却中，${cooldownRemainSec(scope.row)} 秒后可再刷`"
+                    placement="top"
+                  >
+                    <span>
+                      <el-button link type="primary" disabled>刷新数据</el-button>
+                    </span>
+                  </el-tooltip>
+                  <el-button
+                    v-else
+                    link
+                    type="primary"
+                    :loading="isEngagementBusy(scope.row)"
+                    :disabled="isEngagementBusy(scope.row)"
+                    @click="handleRefreshStats(scope.row)"
+                  >
+                    刷新数据
+                  </el-button>
+                </template>
                 <template v-if="scope.row.status === 'failed'">
                   <el-divider direction="vertical" />
                   <el-button
@@ -208,6 +245,39 @@
           </div>
         </div>
         <div class="detail-row">
+          <span class="label">播放</span>
+          <span>{{ formatPlayCount(currentRecord) }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="label">互动</span>
+          <span>{{ formatInteract(currentRecord) }}</span>
+        </div>
+        <div v-if="getWorkStats(currentRecord).length" class="detail-row">
+          <span class="label">分账号</span>
+          <div class="work-links">
+            <div
+              v-for="stat in getWorkStats(currentRecord)"
+              :key="stat.account"
+              class="work-link-item"
+            >
+              <span>{{ accountLabel(currentRecord, stat.account) }}</span>
+              <span>播 {{ formatCount(stat.play_count) }}</span>
+              <span>赞 {{ formatCount(stat.like_count) }}</span>
+              <span>评 {{ formatCount(stat.comment_count) }}</span>
+              <span>藏 {{ formatCount(stat.collect_count) }}</span>
+              <span>{{ matchLabel(stat.match) }}</span>
+            </div>
+          </div>
+        </div>
+        <div class="detail-row">
+          <span class="label">上次同步</span>
+          <span>{{ formatSyncTime(currentRecord) }}</span>
+        </div>
+        <div v-if="currentRecord.engagement_sync?.message" class="detail-row">
+          <span class="label">同步说明</span>
+          <span class="multiline">{{ currentRecord.engagement_sync.message }}</span>
+        </div>
+        <div class="detail-row">
           <span class="label">素材文件</span>
           <span class="multiline">{{ getFileList(currentRecord).join('、') || '无' }}</span>
         </div>
@@ -247,6 +317,15 @@
           @click="handleHeadedRetryFromDetail"
         >
           有头浏览器重试
+        </el-button>
+        <el-button
+          v-if="currentRecord && canRefreshStats(currentRecord)"
+          type="primary"
+          :loading="isEngagementBusy(currentRecord)"
+          :disabled="isEngagementBusy(currentRecord) || isEngagementCooling(currentRecord)"
+          @click="handleRefreshStats(currentRecord)"
+        >
+          {{ isEngagementCooling(currentRecord) ? `冷却 ${cooldownRemainSec(currentRecord)}s` : '刷新数据' }}
         </el-button>
       </template>
     </el-dialog>
@@ -294,7 +373,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -302,6 +381,7 @@ import { accountApi } from '@/api/account'
 import { publishRecordApi } from '@/api/publishRecord'
 import { useAccountStore } from '@/stores/account'
 import { waitAndHandlePublishJob } from '@/utils/runPublishJob'
+import { sleep } from '@/utils/publishCookieRecovery'
 import {
   getPublishBrowserLabel,
   shouldOfferHeadedRetry
@@ -325,6 +405,10 @@ const retryingRecordId = ref(null)
 const retryingHeaded = ref(false)
 const retryConfirmVisible = ref(false)
 const retryConfirmRecord = ref(null)
+const localSyncing = ref({})
+const nowTick = ref(Date.now())
+let nowTimer = null
+const ENGAGEMENT_COOLDOWN_MS = 3 * 60 * 1000
 
 const platformTagMap = {
   '小红书': 'info',
@@ -350,11 +434,167 @@ const getWorkLinks = (record) => {
 }
 
 const workLinkLabel = (record, link) => {
+  const name = accountLabel(record, link.account)
+  return link.file ? `${name} · ${link.file}` : name
+}
+
+const accountLabel = (record, account) => {
   const accounts = Array.isArray(record.account_list) ? record.account_list : []
   const names = getAccountNames(record)
-  const index = accounts.indexOf(link.account)
-  const name = index >= 0 && names[index] ? names[index] : link.account
-  return link.file ? `${name} · ${link.file}` : name
+  const index = accounts.indexOf(account)
+  return index >= 0 && names[index] ? names[index] : account
+}
+
+const getWorkStats = (record) => {
+  return Array.isArray(record?.work_stats) ? record.work_stats : []
+}
+
+const formatCount = (value) => {
+  if (value == null || value === '') return '—'
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '—'
+  return num.toLocaleString('zh-CN')
+}
+
+const getStatsTotal = (record) => {
+  return record?.work_stats_total && typeof record.work_stats_total === 'object'
+    ? record.work_stats_total
+    : {}
+}
+
+const formatPlayCount = (record) => {
+  if (record.platform_type === 2 || record.engagement_supported === false) {
+    return '暂不支持'
+  }
+  return formatCount(getStatsTotal(record).play_count)
+}
+
+const formatInteract = (record) => {
+  if (record.platform_type === 2 || record.engagement_supported === false) {
+    return '暂不支持'
+  }
+  const total = getStatsTotal(record)
+  const parts = []
+  if (total.like_count != null) parts.push(`赞 ${formatCount(total.like_count)}`)
+  if (total.comment_count != null) parts.push(`评 ${formatCount(total.comment_count)}`)
+  if (total.collect_count != null) parts.push(`藏 ${formatCount(total.collect_count)}`)
+  return parts.length ? parts.join(' · ') : '—'
+}
+
+const matchLabel = (match) => {
+  if (match === 'id') return '作品ID'
+  if (match === 'title') return '标题匹配'
+  if (match === 'unmatched') return '未匹配'
+  return '—'
+}
+
+const formatSyncTime = (record) => {
+  const finished = record.engagement_sync?.finished_at
+  if (!finished) return '—'
+  try {
+    return new Date(finished).toLocaleString('zh-CN', {
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
+  } catch {
+    return '—'
+  }
+}
+
+const formatSyncLabel = (record) => {
+  if (record.platform_type === 2 || record.engagement_supported === false) {
+    return '暂不支持'
+  }
+  const status = record.engagement_sync?.status
+  if (status === 'queued') return '排队中'
+  if (status === 'running' || localSyncing.value[record.id]) return '同步中'
+  if (status === 'failed') return '失败'
+  if (status === 'ok') return formatSyncTime(record)
+  return '—'
+}
+
+const canRefreshStats = (record) => {
+  return record.status === 'success' && record.platform_type !== 2 && record.engagement_supported !== false
+}
+
+const isEngagementBusy = (record) => {
+  const status = record.engagement_sync?.status
+  return status === 'queued' || status === 'running' || Boolean(localSyncing.value[record.id])
+}
+
+const cooldownRemainSec = (record) => {
+  void nowTick.value
+  const requested = record.engagement_sync?.requested_at
+  if (requested) {
+    const remain = ENGAGEMENT_COOLDOWN_MS - (Date.now() - new Date(requested).getTime())
+    return remain > 0 ? Math.ceil(remain / 1000) : 0
+  }
+  return Number(record.engagement_sync?.cooldown_remain_sec || 0)
+}
+
+const isEngagementCooling = (record) => {
+  return !isEngagementBusy(record) && cooldownRemainSec(record) > 0
+}
+
+const applyRecord = (row) => {
+  if (!row?.id) return
+  if (currentRecord.value?.id === row.id) {
+    currentRecord.value = row
+  }
+  const idx = records.value.findIndex((item) => item.id === row.id)
+  if (idx !== -1) {
+    records.value[idx] = row
+  }
+}
+
+const pollEngagement = async (recordId, { notify = false } = {}) => {
+  localSyncing.value = { ...localSyncing.value, [recordId]: true }
+  const started = Date.now()
+  try {
+    while (Date.now() - started < 10 * 60 * 1000) {
+      const res = await publishRecordApi.getPublishRecord(recordId)
+      if (res.code !== 200 || !res.data) {
+        break
+      }
+      applyRecord(res.data)
+      const status = res.data.engagement_sync?.status
+      if (status === 'ok' || status === 'failed' || status === 'unsupported') {
+        if (notify) {
+          if (status === 'ok') {
+            ElMessage.success(res.data.engagement_sync?.message || '已同步播放与互动')
+          } else if (status === 'failed') {
+            ElMessage.error(res.data.engagement_sync?.message || '刷新失败')
+          }
+        }
+        break
+      }
+      await sleep(2000)
+    }
+  } catch (error) {
+    console.error('轮询播放互动出错:', error)
+  } finally {
+    const next = { ...localSyncing.value }
+    delete next[recordId]
+    localSyncing.value = next
+  }
+}
+
+const handleRefreshStats = async (record) => {
+  if (!canRefreshStats(record) || isEngagementBusy(record) || isEngagementCooling(record)) {
+    return
+  }
+  try {
+    const res = await publishRecordApi.refreshPublishStats(record.id)
+    if (res.data) {
+      applyRecord(res.data)
+    }
+    ElMessage.success(res.msg || '数据刷新已提交')
+    await pollEngagement(record.id, { notify: true })
+  } catch (error) {
+    console.error('刷新播放互动出错:', error)
+  }
 }
 
 const copyWorkLink = async (url) => {
@@ -609,8 +849,24 @@ const handleDelete = async (record) => {
   }
 }
 
-onMounted(() => {
-  fetchRecords()
+onMounted(async () => {
+  nowTimer = setInterval(() => {
+    nowTick.value = Date.now()
+  }, 1000)
+  await fetchRecords()
+  for (const row of records.value) {
+    const status = row.engagement_sync?.status
+    if (status === 'queued' || status === 'running') {
+      void pollEngagement(row.id)
+    }
+  }
+})
+
+onBeforeUnmount(() => {
+  if (nowTimer) {
+    clearInterval(nowTimer)
+    nowTimer = null
+  }
 })
 </script>
 
@@ -778,7 +1034,7 @@ onMounted(() => {
       -webkit-overflow-scrolling: touch;
 
       :deep(.el-table) {
-        min-width: 900px;
+        min-width: 1180px;
       }
     }
 

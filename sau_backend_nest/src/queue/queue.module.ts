@@ -7,6 +7,8 @@ import { DouyinModule } from '../uploaders/douyin/douyin.module';
 import { KuaishouModule } from '../uploaders/kuaishou/kuaishou.module';
 import { TencentModule } from '../uploaders/tencent/tencent.module';
 import { XiaohongshuModule } from '../uploaders/xiaohongshu/xiaohongshu.module';
+import { EngagementSyncProcessor } from './engagement-sync.processor';
+import { ENGAGEMENT_SYNC_QUEUE_NAME } from './engagement-sync.queue';
 import { PublishProcessor } from './publish.processor';
 import { PUBLISH_QUEUE_NAME } from './publish.queue';
 
@@ -23,12 +25,15 @@ import { PUBLISH_QUEUE_NAME } from './publish.queue';
     BullModule.registerQueue({
       name: PUBLISH_QUEUE_NAME,
     }),
+    BullModule.registerQueue({
+      name: ENGAGEMENT_SYNC_QUEUE_NAME,
+    }),
     PublishRecordModule,
     DouyinModule,
     KuaishouModule,
     XiaohongshuModule,
     TencentModule,
   ],
-  providers: [PublishProcessor],
+  providers: [PublishProcessor, EngagementSyncProcessor],
 })
 export class QueueModule {}
