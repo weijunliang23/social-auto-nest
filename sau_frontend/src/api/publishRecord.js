@@ -30,8 +30,12 @@ export const publishRecordApi = {
     return http.get('/getPublishRecords', params)
   },
 
-  retryPublishRecord: (id) => {
-    return http.get(`/retryPublishRecord?id=${id}`)
+  retryPublishRecord: (id, { browserPublish = false } = {}) => {
+    let url = `/retryPublishRecord?id=${encodeURIComponent(id)}`
+    if (browserPublish) {
+      url += '&browserPublish=true'
+    }
+    return http.get(url)
   },
 
   deletePublishRecord: (id) => {

@@ -12,6 +12,7 @@ import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
 import { DeletePublishRecordQueryDto } from './dto/delete-publish-record-query.dto';
 import { GetPublishRecordQueryDto } from './dto/get-publish-record-query.dto';
 import { GetPublishRecordsQueryDto } from './dto/get-publish-records-query.dto';
+import { RetryPublishRecordQueryDto } from './dto/retry-publish-record-query.dto';
 import { PublishRecordService } from './publish-record.service';
 
 /** 发布记录查询与删除接口 */
@@ -70,18 +71,29 @@ export class PublishRecordController {
   @Get('retryPublishRecord')
   @ApiOperation({
     summary: '重试失败的发布记录',
-    description: '复用同一条 publish_records 记录重新入队执行',
+    description:
+      '复用同一条 publish_records 记录重新入队执行；browserPublish=true 时有头浏览器重试',
   })
   @ApiResponse({ status: 200, description: '重试已提交', type: ApiResponseDto })
   async retryPublishRecord(
     @CurrentUser() user: AuthUser,
-    @Query() query: GetPublishRecordQueryDto,
+    @Query() query: RetryPublishRecordQueryDto,
     @Res() res: Response,
   ): Promise<void> {
     this.sendJson(
       res,
-      await this.publishRecordService.retryPublishRecord(user.userId, query.id),
+      await this.publishRecordService.retryPublishRecord(user.userId, query.id, {
+        headedRetry: this.parseBrowserPublish(query.browserPublish),
+      }),
     );
+  }
+
+  private parseBrowserPublish(value?: string): boolean {
+    if (!value) {
+      return false;
+    }
+    const normalized = value.toLowerCase();
+    return normalized === 'true' || normalized === '1';
   }
 
   @Get('deletePublishRecord')

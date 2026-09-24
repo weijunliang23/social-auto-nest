@@ -61,7 +61,7 @@ export class PublishRecordService {
     private readonly publishQueue: Queue<PublishJobPayload>,
     private readonly accountService: AccountService,
     private readonly materialService: MaterialService,
-  ) {}
+  ) { }
 
   /** 解析记录并附加中文标签，兼容前端 snake_case 字段 */
   private parsePublishRecordRow(
@@ -137,7 +137,7 @@ export class PublishRecordService {
   /** 入队前写入 publish_records，status=queued */
   async createQueuedRecord(input: CreateQueuedRecordInput): Promise<string> {
     const defaultMessage =
-      input.publishKind === 'note' ? '图文发布任务已提交' : '发布任务已提交';
+      input.publishKind === 'note' ? '图文发布任务已提交,可进行其他操作' : '发布任务已提交,可进行其他操作';
     const accountNames = await this.resolveAccountNames(
       input.ownerId,
       input.accountList,
@@ -246,6 +246,7 @@ export class PublishRecordService {
   async retryPublishRecord(
     ownerId: string,
     recordId: string | undefined,
+    options?: { headedRetry?: boolean },
   ): Promise<ApiResponse<{ recordId: string }>> {
     if (!isValidObjectId(recordId)) {
       return apiErr(400, 'Invalid or missing record ID');
@@ -258,6 +259,18 @@ export class PublishRecordService {
       }
       if (record.status !== 'failed') {
         return apiErr(400, '仅失败状态的记录可重试');
+      }
+
+      if (options?.headedRetry) {
+        const extra = {
+          ...((record.extra_config ?? {}) as Record<string, unknown>),
+          browserPublish: true,
+        };
+        await this.publishRecordModel.updateOne(
+          { _id: recordId, ownerId: toObjectId(ownerId) },
+          { extra_config: extra },
+        );
+        record.extra_config = extra;
       }
 
       const accountsOk = await this.accountService.validateAccountOwnership(
@@ -283,8 +296,11 @@ export class PublishRecordService {
         ownerId,
         recordId!,
       );
-      const retryMessage =
-        record.publish_kind === 'note'
+      const retryMessage = options?.headedRetry
+        ? record.publish_kind === 'note'
+          ? '图文有头浏览器重试任务已提交'
+          : '有头浏览器重试任务已提交'
+        : record.publish_kind === 'note'
           ? '图文发布重试任务已提交'
           : '发布重试任务已提交';
 

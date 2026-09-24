@@ -87,8 +87,9 @@
                 v-if="scope.row.status === 'failed'"
                 size="small"
                 type="warning"
-                :loading="retryingRecordId === scope.row.id"
-                @click="handleRetryFromList(scope.row)"
+                :loading="retryingRecordId === scope.row.id && !retryingHeaded"
+                :disabled="retryingRecordId === scope.row.id"
+                @click="openRetryConfirmDialog(scope.row)"
               >
                 重试
               </el-button>
@@ -127,6 +128,10 @@
         <div class="detail-row">
           <span class="label">平台</span>
           <span>{{ currentRecord.platform_name }}</span>
+        </div>
+        <div class="detail-row">
+          <span class="label">发布方式</span>
+          <span>{{ getPublishBrowserLabel(currentRecord) }}</span>
         </div>
         <div class="detail-row">
           <span class="label">状态</span>
@@ -190,10 +195,60 @@
         <el-button
           v-if="currentRecord?.status === 'failed'"
           type="primary"
-          :loading="retryingRecordId === currentRecord?.id"
+          :loading="retryingRecordId === currentRecord?.id && !retryingHeaded"
+          :disabled="retryingRecordId === currentRecord?.id"
           @click="handleRetryFromDetail"
         >
           重试
+        </el-button>
+        <el-button
+          v-if="shouldOfferHeadedRetry(currentRecord)"
+          type="success"
+          :loading="retryingRecordId === currentRecord?.id && retryingHeaded"
+          :disabled="retryingRecordId === currentRecord?.id"
+          @click="handleHeadedRetryFromDetail"
+        >
+          有头浏览器重试
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="retryConfirmVisible"
+      title="重试确认"
+      width="480px"
+      :close-on-click-modal="!retryingRecordId"
+      @closed="retryConfirmRecord = null"
+    >
+      <div v-if="retryConfirmRecord" class="retry-confirm-body">
+        <p class="retry-confirm-main">
+          确定要重试发布「{{ retryConfirmRecord.title }}」吗？将使用原记录的账号与素材再次提交。
+        </p>
+        <p class="retry-confirm-hint">若多次失败建议有头重试，成功概率高</p>
+      </div>
+      <template #footer>
+        <el-button
+          :disabled="Boolean(retryingRecordId)"
+          @click="retryConfirmVisible = false"
+        >
+          取消
+        </el-button>
+        <el-button
+          type="primary"
+          :loading="retryingRecordId === retryConfirmRecord?.id && !retryingHeaded"
+          :disabled="Boolean(retryingRecordId)"
+          @click="confirmRetryFromDialog(false)"
+        >
+          确定重试
+        </el-button>
+        <el-button
+          v-if="shouldOfferHeadedRetry(retryConfirmRecord)"
+          type="success"
+          :loading="retryingRecordId === retryConfirmRecord?.id && retryingHeaded"
+          :disabled="Boolean(retryingRecordId)"
+          @click="confirmRetryFromDialog(true)"
+        >
+          有头重试
         </el-button>
       </template>
     </el-dialog>
@@ -209,6 +264,10 @@ import { accountApi } from '@/api/account'
 import { publishRecordApi } from '@/api/publishRecord'
 import { useAccountStore } from '@/stores/account'
 import { waitAndHandlePublishJob } from '@/utils/runPublishJob'
+import {
+  getPublishBrowserLabel,
+  shouldOfferHeadedRetry
+} from '@/utils/publishBrowserMode'
 
 const router = useRouter()
 const accountStore = useAccountStore()
@@ -225,6 +284,9 @@ const isRefreshing = ref(false)
 const detailDialogVisible = ref(false)
 const currentRecord = ref(null)
 const retryingRecordId = ref(null)
+const retryingHeaded = ref(false)
+const retryConfirmVisible = ref(false)
+const retryConfirmRecord = ref(null)
 
 const platformTagMap = {
   '小红书': 'info',
@@ -369,51 +431,54 @@ const refreshRecordInView = async (recordId) => {
   }
 }
 
-const runRetry = async (record) => {
+const runRetry = async (record, { browserPublish = false } = {}) => {
   if (record.status !== 'failed') {
-    return
+    return false
   }
   await ensureAccountsLoaded()
   retryingRecordId.value = record.id
+  retryingHeaded.value = browserPublish
   try {
-    const retryRes = await publishRecordApi.retryPublishRecord(record.id)
+    const retryRes = await publishRecordApi.retryPublishRecord(record.id, {
+      browserPublish
+    })
     if (retryRes.code !== 200) {
       ElMessage.error(retryRes.msg || '重试提交失败')
-      return
+      return false
     }
     const recordId = retryRes.data?.recordId || record.id
-    await waitAndHandlePublishJob(recordId, {
+    const result = await waitAndHandlePublishJob(recordId, {
       accountStore,
       router,
-      successLabel: '重试发布成功'
+      successLabel: browserPublish ? '有头浏览器重试成功' : '重试发布成功'
     })
     await fetchRecords()
     await refreshRecordInView(record.id)
+    return result.ok
   } catch (error) {
     console.error('重试发布出错:', error)
     ElMessage.error(error.message || '重试失败')
     await fetchRecords()
+    return false
   } finally {
     retryingRecordId.value = null
+    retryingHeaded.value = false
   }
 }
 
-const handleRetryFromList = async (record) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要重试发布「${record.title}」吗？将使用原记录的账号与素材再次提交。`,
-      '重试确认',
-      {
-        confirmButtonText: '确定重试',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-    await runRetry(record)
-  } catch (error) {
-    if (error !== 'cancel') {
-      console.error('重试确认出错:', error)
-    }
+const openRetryConfirmDialog = (record) => {
+  retryConfirmRecord.value = record
+  retryConfirmVisible.value = true
+}
+
+const confirmRetryFromDialog = async (browserPublish) => {
+  const record = retryConfirmRecord.value
+  if (!record) {
+    return
+  }
+  const ok = await runRetry(record, { browserPublish })
+  if (ok) {
+    retryConfirmVisible.value = false
   }
 }
 
@@ -422,6 +487,28 @@ const handleRetryFromDetail = async () => {
     return
   }
   await runRetry(currentRecord.value)
+}
+
+const handleHeadedRetryFromDetail = async () => {
+  if (!currentRecord.value) {
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将使用有头浏览器（可视化）重新发布「${currentRecord.value.title}」，会弹出 Chrome 窗口，是否继续？`,
+      '有头浏览器重试',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    await runRetry(currentRecord.value, { browserPublish: true })
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('有头重试确认出错:', error)
+    }
+  }
 }
 
 const handleDelete = async (record) => {
@@ -510,6 +597,21 @@ onMounted(() => {
     display: flex;
     justify-content: flex-end;
     margin-top: 20px;
+  }
+
+  .retry-confirm-body {
+    .retry-confirm-main {
+      margin: 0 0 12px;
+      line-height: 1.6;
+      color: $text-primary;
+    }
+
+    .retry-confirm-hint {
+      margin: 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: $text-secondary;
+    }
   }
 
   .detail-content {

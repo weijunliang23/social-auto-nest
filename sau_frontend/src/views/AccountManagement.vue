@@ -351,6 +351,11 @@
     <!-- 添加/编辑账号对话框 -->
     <el-dialog v-model="dialogVisible" :title="dialogType === 'add' ? '添加账号' : '编辑账号'" width="500px"
       :close-on-click-modal="false" :close-on-press-escape="!sseConnecting" :show-close="!sseConnecting">
+      <div
+        class="account-dialog-body"
+        v-loading="headlessLoginPreparing"
+        element-loading-text="正在启动无浏览器登录，请稍候…"
+      >
       <el-form :model="accountForm" label-width="80px" :rules="rules" ref="accountFormRef">
         <el-form-item label="平台" prop="platform">
           <el-select v-model="accountForm.platform" placeholder="请选择平台" style="width: 100%"
@@ -397,6 +402,7 @@
           </div>
         </div>
       </el-form>
+      </div>
       <template #footer>
         <span class="dialog-footer">
           <el-button @click="dialogVisible = false">取消</el-button>
@@ -629,6 +635,15 @@ const rules = {
 const sseConnecting = ref(false)
 const qrCodeData = ref('')
 const loginStatus = ref('')
+
+// 无浏览器模式：启动 SSE 至二维码出现前的全屏 loading
+const headlessLoginPreparing = computed(() =>
+  dialogType.value === 'add' &&
+  !accountForm.browserLogin &&
+  sseConnecting.value &&
+  !qrCodeData.value &&
+  !loginStatus.value
+)
 
 // 添加账号
 const handleAddAccount = () => {
@@ -1049,6 +1064,10 @@ onBeforeUnmount(() => {
       transform: scale(1.05);
       box-shadow: 0 0 8px rgba(0, 0, 0, 0.15);
     }
+  }
+
+  .account-dialog-body {
+    min-height: 120px;
   }
 
   .browser-login-tip {

@@ -32,7 +32,7 @@ export class PublishService {
     private readonly materialService: MaterialService,
     @InjectQueue(PUBLISH_QUEUE_NAME)
     private readonly publishQueue: Queue<PublishJobPayload>,
-  ) {}
+  ) { }
 
   private buildScheduleConfig(data: {
     enableTimer?: boolean | number;
@@ -59,12 +59,15 @@ export class PublishService {
     if (category === 0) {
       category = null;
     }
+    const browserPublish =
+      Boolean(data.browserPublish) || data.type === MEDIA_TYPE.TENCENT;
     return {
       category,
       isDraft: data.isDraft ?? false,
       productLink: data.productLink ?? '',
       productTitle: data.productTitle ?? '',
       thumbnail: data.thumbnail ?? '',
+      browserPublish,
     };
   }
 
@@ -122,7 +125,7 @@ export class PublishService {
         removeOnFail: false,
       });
       const msg =
-        payload.kind === 'video' ? '发布任务已提交' : '图文发布任务已提交';
+        payload.kind === 'video' ? '发布任务已提交,可进行其他操作' : '图文发布任务已提交,可进行其他操作';
       return apiOk({ recordId }, msg);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -186,7 +189,7 @@ export class PublishService {
         thumbnail: data.thumbnail,
         category: extraConfig.category as number | null,
         isDraft: data.isDraft,
-        browserPublish: data.browserPublish,
+        browserPublish: extraConfig.browserPublish as boolean,
       },
       {
         publishKind: 'video',
@@ -263,6 +266,9 @@ export class PublishService {
         tags: data.tags,
         scheduleEnabled: schedule.enabled,
         scheduleConfig: schedule.config,
+        extraConfig: {
+          browserPublish: Boolean(data.browserPublish),
+        },
       },
     );
   }
