@@ -99,14 +99,14 @@ export class PublishService {
       Parameters<PublishRecordService['createQueuedRecord']>[0],
       'ownerId'
     >,
-  ): Promise<ApiResponse<null>> {
+  ): Promise<ApiResponse<{ recordId: string }>> {
     const ownershipError = await this.validateOwnership(
       ownerId,
       payload.fileList,
       payload.accountList,
     );
     if (ownershipError) {
-      return ownershipError;
+      return ownershipError as unknown as ApiResponse<{ recordId: string }>;
     }
 
     const recordId = await this.publishRecordService.createQueuedRecord({
@@ -123,7 +123,7 @@ export class PublishService {
       });
       const msg =
         payload.kind === 'video' ? '发布任务已提交' : '图文发布任务已提交';
-      return apiOk(null, msg);
+      return apiOk({ recordId }, msg);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       this.logger.error(`入队失败 recordId=${recordId}: ${msg}`);
@@ -136,7 +136,10 @@ export class PublishService {
     }
   }
 
-  postVideo(ownerId: string, data: PostVideoDto): Promise<ApiResponse<null>> {
+  postVideo(
+    ownerId: string,
+    data: PostVideoDto,
+  ): Promise<ApiResponse<{ recordId: string }>> {
     if (!data) {
       return Promise.resolve(apiErr(400, '请求数据不能为空'));
     }
@@ -199,7 +202,10 @@ export class PublishService {
     );
   }
 
-  postNote(ownerId: string, data: PostNoteDto): Promise<ApiResponse<null>> {
+  postNote(
+    ownerId: string,
+    data: PostNoteDto,
+  ): Promise<ApiResponse<{ recordId: string }>> {
     if (!data) {
       return Promise.resolve(apiErr(400, '请求数据不能为空'));
     }

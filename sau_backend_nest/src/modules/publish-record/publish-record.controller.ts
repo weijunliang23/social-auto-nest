@@ -10,6 +10,7 @@ import type { ApiResponse as ApiResult } from '../../shared/api-response.util';
 import { ApiResponseDto } from '../../shared/dto/api-response.dto';
 import { CurrentUser, type AuthUser } from '../auth/current-user.decorator';
 import { DeletePublishRecordQueryDto } from './dto/delete-publish-record-query.dto';
+import { GetPublishRecordQueryDto } from './dto/get-publish-record-query.dto';
 import { GetPublishRecordsQueryDto } from './dto/get-publish-records-query.dto';
 import { PublishRecordService } from './publish-record.service';
 
@@ -23,6 +24,23 @@ export class PublishRecordController {
   private sendJson(res: Response, result: ApiResult<unknown>): void {
     const status = result.code >= 400 ? result.code : 200;
     res.status(status).json(result);
+  }
+
+  @Get('getPublishRecord')
+  @ApiOperation({
+    summary: '查询单条发布记录',
+    description: '用于轮询发布任务最终状态（queued / running / success / failed）',
+  })
+  @ApiResponse({ status: 200, description: '发布记录详情', type: ApiResponseDto })
+  async getPublishRecord(
+    @CurrentUser() user: AuthUser,
+    @Query() query: GetPublishRecordQueryDto,
+    @Res() res: Response,
+  ): Promise<void> {
+    this.sendJson(
+      res,
+      await this.publishRecordService.getPublishRecord(user.userId, query.id),
+    );
   }
 
   @Get('getPublishRecords')

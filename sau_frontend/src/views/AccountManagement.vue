@@ -410,7 +410,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { Refresh, CircleCheckFilled, CircleCloseFilled, Download, Upload, Loading } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { accountApi } from '@/api/account'
@@ -423,6 +424,8 @@ import { openAuthenticatedSse } from '@/utils/sse'
 const accountStore = useAccountStore()
 // 获取应用状态管理
 const appStore = useAppStore()
+const route = useRoute()
+const router = useRouter()
 
 // 当前激活的标签页
 const activeTab = ref('all')
@@ -643,6 +646,31 @@ const handleAddAccount = () => {
   loginStatus.value = ''
   dialogVisible.value = true
 }
+
+const openAddAccountFromQuery = () => {
+  if (route.query.openAdd !== '1') {
+    return
+  }
+  const platformQuery = route.query.platform
+  handleAddAccount()
+  if (typeof platformQuery === 'string' && platformQuery) {
+    accountForm.platform = platformQuery
+  }
+  router.replace({ path: route.path, query: {} })
+}
+
+watch(
+  () => route.query.openAdd,
+  (openAdd) => {
+    if (openAdd === '1') {
+      openAddAccountFromQuery()
+    }
+  }
+)
+
+onMounted(() => {
+  openAddAccountFromQuery()
+})
 
 // 编辑账号
 const handleEdit = (row) => {

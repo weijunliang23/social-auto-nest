@@ -221,6 +221,29 @@ export class PublishRecordService {
     return filter;
   }
 
+  /** 按 ID 查询单条发布记录（当前用户） */
+  async getPublishRecord(
+    ownerId: string,
+    recordId: string | undefined,
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    if (!isValidObjectId(recordId)) {
+      return apiErr(400, 'Invalid or missing record ID');
+    }
+
+    try {
+      const row = await this.getRecordById(recordId!, ownerId);
+      if (!row) {
+        return apiErr(404, 'Record not found');
+      }
+      return apiOk(this.parsePublishRecordRow(row), 'success');
+    } catch (e) {
+      return apiErr(
+        500,
+        `获取发布记录失败: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
+  }
+
   /** 动态拼接条件，按创建时间倒序分页返回 */
   async getPublishRecords(
     ownerId: string,

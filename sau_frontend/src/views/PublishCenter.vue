@@ -570,7 +570,14 @@ import { ElMessage } from 'element-plus'
 import { useAccountStore } from '@/stores/account'
 import { useAppStore } from '@/stores/app'
 import { materialApi } from '@/api/material'
+import { accountApi } from '@/api/account'
+import { publishRecordApi } from '@/api/publishRecord'
 import { http } from '@/utils/request'
+import {
+  isCookieLoginFailure,
+  PLATFORM_TYPE_LABEL,
+  resolveAccountIdFromFailure
+} from '@/utils/publishCookieRecovery'
 
 const router = useRouter()
 
@@ -851,6 +858,37 @@ const cancelPublish = (tab) => {
   ElMessage.info('已取消发布')
 }
 
+/** Cookie 失效：删账号并跳转账号管理打开添加弹窗 */
+const handleCookieLoginRecovery = async (record, tab, statusMessage) => {
+  const platformLabel =
+    PLATFORM_TYPE_LABEL[record.platform_type] ||
+    PLATFORM_TYPE_LABEL[tab.selectedPlatform] ||
+    '快手'
+
+  const accountId = resolveAccountIdFromFailure(
+    statusMessage,
+    accountStore,
+    tab.selectedAccounts
+  )
+
+  if (accountId) {
+    try {
+      const delRes = await accountApi.deleteAccount(accountId)
+      if (delRes.code === 200) {
+        accountStore.deleteAccount(accountId)
+      }
+    } catch (e) {
+      console.error('自动删除失效账号失败:', e)
+    }
+  }
+
+  ElMessage.warning('登录已失效，已移除该账号，请重新添加')
+  await router.push({
+    path: '/account-management',
+    query: { openAdd: '1', platform: platformLabel }
+  })
+}
+
 // 确认发布
 const confirmPublish = async (tab, browserPublish = false, { redirectOnSuccess = true } = {}) => {
   // 防止重复点击
@@ -902,6 +940,7 @@ const confirmPublish = async (tab, browserPublish = false, { redirectOnSuccess =
     browserPublish || tab.selectedPlatform === 2 ? { browserPublish: true } : {}
 
   try {
+    let submitRes
     if (tab.publishKind === 'note') {
       const noteData = {
         type: tab.selectedPlatform,
@@ -913,8 +952,7 @@ const confirmPublish = async (tab, browserPublish = false, { redirectOnSuccess =
         ...timerPayload,
         ...browserPublishPayload
       }
-      await http.post('/postNote', noteData)
-      ElMessage.success('图文发布成功')
+      submitRes = await http.post('/postNote', noteData)
     } else {
       const publishData = {
         type: tab.selectedPlatform,
@@ -929,21 +967,51 @@ const confirmPublish = async (tab, browserPublish = false, { redirectOnSuccess =
         isDraft: tab.isDraft,
         ...browserPublishPayload
       }
-      await http.post('/postVideo', publishData)
-      ElMessage.success('视频发布成功')
+      submitRes = await http.post('/postVideo', publishData)
     }
 
-    if (redirectOnSuccess) {
-      router.push('/publish-records')
-    } else {
-      tab.fileList = []
-      tab.displayFileList = []
-      tab.title = ''
-      tab.noteBody = ''
-      tab.selectedTopics = []
-      tab.selectedAccounts = []
-      tab.scheduleEnabled = false
+    const recordId = submitRes?.data?.recordId
+    if (!recordId) {
+      throw new Error('未获取到发布任务 ID')
     }
+
+    tab.publishStatus = {
+      message: submitRes.msg || '发布任务已提交，正在执行…',
+      type: 'info'
+    }
+    ElMessage.info(submitRes.msg || '发布任务已提交，正在执行…')
+
+    const record = await publishRecordApi.waitForPublishRecord(recordId)
+
+    if (record.status === 'success') {
+      tab.publishStatus = { message: '发布成功', type: 'success' }
+      ElMessage.success(
+        tab.publishKind === 'note' ? '图文发布成功' : '视频发布成功'
+      )
+      if (redirectOnSuccess) {
+        router.push('/publish-records')
+      } else {
+        tab.fileList = []
+        tab.displayFileList = []
+        tab.title = ''
+        tab.noteBody = ''
+        tab.selectedTopics = []
+        tab.selectedAccounts = []
+        tab.scheduleEnabled = false
+      }
+      return
+    }
+
+    const failMsg = record.status_message || '发布失败'
+    tab.publishStatus = { message: `发布失败：${failMsg}`, type: 'error' }
+
+    if (isCookieLoginFailure(failMsg)) {
+      await handleCookieLoginRecovery(record, tab, failMsg)
+      throw new Error(failMsg)
+    }
+
+    ElMessage.error(failMsg)
+    throw new Error(failMsg)
   } catch (error) {
     console.error('发布错误:', error)
     tab.publishStatus = {
