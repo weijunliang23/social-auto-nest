@@ -4,6 +4,7 @@
 // 导入变量
 @use './variables.scss' as *;
 @use './responsive.scss' as *;
+@use './page-layout.scss';
 
 // 全局样式
 body {

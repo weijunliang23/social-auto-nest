@@ -1,11 +1,13 @@
 <template>
-  <div class="publish-record">
+  <div class="publish-record page-view">
     <div class="page-header">
       <h1>发布记录</h1>
     </div>
 
-    <div class="record-list-container">
-      <div class="record-search">
+    <div class="page-panel">
+      <div class="page-panel__body">
+      <div class="table-toolbar">
+        <div class="toolbar-filters">
         <el-input
           v-model="searchKeyword"
           placeholder="输入标题搜索"
@@ -31,17 +33,19 @@
           <el-option label="成功" value="success" />
           <el-option label="失败" value="failed" />
         </el-select>
-        <div class="action-buttons">
-          <el-button type="primary" @click="handleSearch">搜索</el-button>
-          <el-button type="info" @click="fetchRecords" :loading="isRefreshing">
+        </div>
+        <div class="toolbar-actions">
+          <el-button @click="fetchRecords" :loading="isRefreshing">
             <el-icon :class="{ 'is-loading': isRefreshing }"><Refresh /></el-icon>
             <span v-if="isRefreshing">刷新中</span>
+            <span v-else>刷新</span>
           </el-button>
+          <el-button type="primary" @click="handleSearch">搜索</el-button>
         </div>
       </div>
 
       <div v-if="records.length > 0" class="record-list">
-        <el-table :data="records" style="width: 100%" v-loading="isRefreshing">
+        <el-table :data="records" class="sau-data-table" stripe v-loading="isRefreshing">
           <el-table-column prop="created_at" label="发布时间" width="180" />
           <el-table-column label="类型" width="80">
             <template #default="scope">
@@ -80,20 +84,25 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="240" fixed="right">
+          <el-table-column label="操作" width="168" fixed="right" align="right">
             <template #default="scope">
-              <el-button size="small" @click="handleViewDetail(scope.row)">详情</el-button>
-              <el-button
-                v-if="scope.row.status === 'failed'"
-                size="small"
-                type="warning"
-                :loading="retryingRecordId === scope.row.id && !retryingHeaded"
-                :disabled="retryingRecordId === scope.row.id"
-                @click="openRetryConfirmDialog(scope.row)"
-              >
-                重试
-              </el-button>
-              <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+              <div class="table-action-cell">
+                <el-button link type="primary" @click="handleViewDetail(scope.row)">详情</el-button>
+                <template v-if="scope.row.status === 'failed'">
+                  <el-divider direction="vertical" />
+                  <el-button
+                    link
+                    type="warning"
+                    :loading="retryingRecordId === scope.row.id && !retryingHeaded"
+                    :disabled="retryingRecordId === scope.row.id"
+                    @click="openRetryConfirmDialog(scope.row)"
+                  >
+                    重试
+                  </el-button>
+                </template>
+                <el-divider direction="vertical" />
+                <el-button link type="danger" @click="handleDelete(scope.row)">删除</el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
@@ -112,6 +121,7 @@
 
       <div v-else-if="!isRefreshing" class="empty-data">
         <el-empty description="暂无发布记录" />
+      </div>
       </div>
     </div>
 

@@ -1,11 +1,13 @@
 <template>
-  <div class="material-management">
+  <div class="material-management page-view">
     <div class="page-header">
       <h1>素材管理</h1>
     </div>
-    
-    <div class="material-list-container">
-      <div class="material-search">
+
+    <div class="page-panel">
+      <div class="page-panel__body">
+      <div class="table-toolbar">
+        <div class="toolbar-filters">
         <el-input
           v-model="searchKeyword"
           placeholder="输入文件名搜索"
@@ -14,17 +16,19 @@
           @clear="handleSearch"
           @input="handleSearch"
         />
-        <div class="action-buttons">
-          <el-button type="primary" @click="handleUploadMaterial">上传素材</el-button>
-          <el-button type="info" @click="fetchMaterials" :loading="false">
+        </div>
+        <div class="toolbar-actions">
+          <el-button @click="fetchMaterials" :loading="isRefreshing">
             <el-icon :class="{ 'is-loading': isRefreshing }"><Refresh /></el-icon>
             <span v-if="isRefreshing">刷新中</span>
+            <span v-else>刷新</span>
           </el-button>
+          <el-button type="primary" @click="handleUploadMaterial">上传素材</el-button>
         </div>
       </div>
-      
+
       <div v-if="filteredMaterials.length > 0" class="material-list">
-        <el-table :data="filteredMaterials" style="width: 100%">
+        <el-table :data="filteredMaterials" class="sau-data-table" stripe>
           <el-table-column prop="uuid" label="UUID" width="180" />
           <el-table-column prop="filename" label="文件名" width="300" />
           <el-table-column prop="filesize" label="文件大小" width="120">
@@ -33,17 +37,21 @@
             </template>
           </el-table-column>
           <el-table-column prop="upload_time" label="上传时间" width="180" />
-          <el-table-column label="操作">
+          <el-table-column label="操作" width="140" fixed="right" align="right">
             <template #default="scope">
-              <el-button size="small" @click="handlePreview(scope.row)">预览</el-button>
-              <el-button size="small" type="danger" @click="handleDelete(scope.row)">删除</el-button>
+              <div class="table-action-cell">
+                <el-button link type="primary" @click="handlePreview(scope.row)">预览</el-button>
+                <el-divider direction="vertical" />
+                <el-button link type="danger" @click="handleDelete(scope.row)">删除</el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>
       </div>
-      
+
       <div v-else class="empty-data">
         <el-empty description="暂无素材数据" />
+      </div>
       </div>
     </div>
     
