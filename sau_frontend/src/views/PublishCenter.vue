@@ -73,7 +73,7 @@
 
           <!-- 视频上传区域 -->
           <div v-if="tab.publishKind === 'video'" class="upload-section">
-            <h3>视频</h3>
+            <h3 class="required">视频</h3>
             <div class="upload-options">
               <el-button type="primary" @click="showUploadOptions(tab)" class="upload-btn">
                 <el-icon><Upload /></el-icon>
@@ -96,7 +96,7 @@
 
           <!-- 图文：图片上传 -->
           <div v-else class="upload-section">
-            <h3>图片</h3>
+            <h3 class="required">图片</h3>
             <div class="upload-options">
               <el-button type="primary" @click="showUploadOptions(tab)" class="upload-btn">
                 <el-icon><Upload /></el-icon>
@@ -272,7 +272,7 @@
 
           <!-- 账号选择 -->
           <div class="account-section">
-            <h3>账号</h3>
+            <h3 class="required">账号</h3>
             <div class="account-display">
               <div class="selected-accounts">
                 <el-tag
@@ -330,7 +330,7 @@
 
           <!-- 平台选择 -->
           <div class="platform-section">
-            <h3>平台</h3>
+            <h3 class="required">平台</h3>
             <el-radio-group v-model="tab.selectedPlatform" class="platform-radios">
               <el-radio 
                 v-for="platform in platformsForKind(tab)" 
@@ -384,7 +384,7 @@
 
           <!-- 标题输入 -->
           <div class="title-section">
-            <h3>标题</h3>
+            <h3 class="required">标题</h3>
             <el-input
               v-model="tab.title"
               type="textarea"
@@ -1330,6 +1330,12 @@ const batchPublish = async () => {
           font-weight: 500;
           color: $text-primary;
           margin: 0 0 10px 0;
+
+          &.required::before {
+            content: '*';
+            color: #f56c6c;
+            margin-right: 4px;
+          }
         }
         
         .upload-section,
